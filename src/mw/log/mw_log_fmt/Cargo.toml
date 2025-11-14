@@ -1,0 +1,8 @@
+[package]
+name = "mw_log_fmt"
+version.workspace = true
+authors.workspace = true
+readme.workspace = true
+edition.workspace = true
+
+[dependencies]

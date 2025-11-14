@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["mw_log", "mw_log_fmt", "mw_log_macro"]
+
+[workspace.package]
+version = "0.0.1"
+authors = ["S-CORE"]
+readme = "README.md"
+edition = "2024"
+
+[workspace.dependencies]
+mw_log = { path = "mw_log" }
+mw_log_fmt = { path = "mw_log_fmt" }
+mw_log_macro = { path = "mw_log_macro" }
