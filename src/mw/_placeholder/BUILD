@@ -10,9 +10,21 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@score_baselibs_rust_crates//:defs.bzl", "all_crate_deps")
+
+rust_library(
+    name = "_placeholder",
+    srcs = glob(["src/**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
 
 rust_test(
-    name = "rust_hello_test",
-    srcs = ["test_main.rs"],
+    name = "_placeholder_tests",
+    crate = ":_placeholder",
+    deps = all_crate_deps(
+        normal = True,
+    ) + [
+        "//src/mw/_placeholder",
+    ],
 )

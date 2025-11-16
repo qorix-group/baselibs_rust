@@ -10,10 +10,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-cc_test(
-    name = "cpp_test_main",
-    srcs = ["test_main.cpp"],
-    deps = [
-        "@googletest//:gtest_main",  # GoogleTest dependency via Bazel Modules
+
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@score_baselibs_rust_crates//:defs.bzl", "all_crate_deps")
+
+rust_binary(
+    name = "_placeholder_example",
+    srcs = glob(["src/**/*.rs"]),
+    deps = all_crate_deps(
+        normal = True,
+    ) + [
+        "//src/mw/_placeholder",
     ],
 )

@@ -1,0 +1,12 @@
+[package]
+name = "_placeholder_example"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+authors.workspace = true
+
+[dependencies]
+_placeholder.workspace = true
+
+[lints]
+workspace = true
