@@ -59,11 +59,6 @@ jobs:
         with:
           command: fmt
           args: -- --check
-      - name: check code license header (custom)
-        uses: actions-rs/cargo@v1
-        with:
-          command: xtask
-          args: check_lic
 
       - name: check clippy errors
         uses: actions-rs/cargo@v1

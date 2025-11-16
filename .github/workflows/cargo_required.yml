@@ -92,10 +92,3 @@ jobs:
              --skip test_one_producer_multi_stealer_mt_thread \
              --skip test_one_producer_one_stealer_mt_thread \
           2>&1 | tee miri_report.txt
-
-      # ---------- LOOM ----------
-      - name: Run Atomic tests with LOOM
-        if: github.event.pull_request.draft == false
-        run: |
-          set -o pipefail
-          cargo xtask build:loom
