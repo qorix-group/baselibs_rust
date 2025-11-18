@@ -22,6 +22,8 @@ setup_starpls(
 copyright_checker(
     name = "copyright",
     srcs = [
+        "docs",
+        "examples",
         "src",
         "tests",
         "//:BUILD",
