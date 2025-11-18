@@ -11,24 +11,38 @@
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
 
-name: Gitlint check
+name: Bazel Tests
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, synchronize]
+  merge_group:
+    types: [checks_requested]
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
-  lint-commits:
-    name: check-commit-messages
+  setup-and-run-tests:
     runs-on: ${{ vars.REPO_RUNNER_LABELS && fromJSON(vars.REPO_RUNNER_LABELS) || 'ubuntu-latest' }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+
+      - name: Install protoc 26.1
+        uses: arduino/setup-protoc@v3
         with:
-          fetch-depth: 0
-      - name: Run Gitlint Action
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: ./.github/actions/gitlint
+          version: 26.1
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bazel with shared caching
+        uses: bazel-contrib/setup-bazel@0.15.0
         with:
-          pr-number: ${{ github.event.number }}
-          base-branch: ${{ github.event.pull_request.base.ref }}
+          bazelisk-version: 1.26.0
+          disk-cache: true
+          repository-cache: true
+          bazelisk-cache: true
+
+      - name: Run Tests via Bazel
+        run: |
+          echo "Running: bazel test //src/..."
+          bazel test //src/...

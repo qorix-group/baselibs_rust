@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+# Split to default members without tests and examples.
+# Used when executing cargo from project root.
+default-members = ["src/log"]
+# Include tests and examples as a member for IDE support and Bazel builds.
+members = ["src/log"]
+
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license-file = "LICENSE.md"
+authors = ["S-CORE Contributors"]
+
+
+[workspace.dependencies]
+
+
+[workspace.lints.clippy]
+std_instead_of_core = "warn"
+alloc_instead_of_core = "warn"
+
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }

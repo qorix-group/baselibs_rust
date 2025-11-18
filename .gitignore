@@ -54,3 +54,21 @@ styles/
 .venv
 __pycache__/
 /.coverage
+
+# Rust
+debug/
+target/
+/build/
+
+*~
+.*swp
+.*swo
+
+# pytest reports
+tests/**/*.html
+tests/**/*.xml
+
+# VS Code files
+.vscode*
+*.orig
+.venv_docs

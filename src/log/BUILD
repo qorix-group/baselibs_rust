@@ -10,9 +10,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-load("@rules_rust//rust:defs.bzl", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "log",
+    srcs = glob(["src/**/*.rs"]),
+    visibility = ["//visibility:public"],
+)
 
 rust_test(
-    name = "rust_hello_test",
-    srcs = ["test_main.rs"],
+    name = "log_tests",
+    crate = ":log",
 )
