@@ -1,0 +1,166 @@
+@startuml log_interface
+
+package log <<component>> {
+    +interface Log <<trait>> {
+        +enabled(&self, metadata: &Metadata<_>) : bool
+        +log(&self, record: &Record) : ()
+        +flush(&self) : ()
+    }
+
+    +class Record<'a> <<struct>> {
+        +builder() : RecordBuilder
+        +args() : Arguments
+        +metadata() : Metadata
+        +level() : Level
+        +target() : String
+        +module_path() : Option<String>
+        +file() : Option<String>
+        +line() : Option<String>
+    }
+
+    +class Metadata<'a> <<struct>> {
+        +builder(): MetadataBuilder
+        +level(): Level
+        +target(): String
+    }
+
+    Log *-- Record
+    Log *-- Metadata
+
+    +enum Level <<enum>> {
+        Fatal
+        Error
+        Warn
+        Info
+        Debug
+        Trace
+    }
+
+    +enum LevelFilter <<enum>> {
+        Off
+        Fatal
+        Error
+        Warn
+        Info
+        Debug
+        Trace
+    }
+
+    class mw_log <<module>> {
+        +set_logger(logger: &'static dyn Log) : Result<(), SetLoggerError>
+        +set_max_level(level: LevelFilter) : ()
+        +max_level() : LevelFilter
+        +logger() : &'static dyn Log
+
+        +log!(target: &str, level: Level, ...) : ()
+        +log_enabled!(target: &str, level: Level) : bool
+        +fatal!(...) : ()
+        +error!(...) : ()
+        +warn!(...) : ()
+        +info!(...) : ()
+        +debug!(...) : ()
+        +trace!(...) : ()
+    }
+
+    class mw_log_macro <<module>> {
+        +mw_log_format_args!(format_string: &str, args...) : Arguments<'_>
+        +mw_log_format_args_nl!(format_string: &str, args...) : Arguments<'_>
+    }
+
+    package "mw_log_fmt" {
+        +interface ScoreWrite <<trait>> {
+            +write_bool(&mut self, v: &bool, spec: &FormatSpec) : Result
+            +write_f32(&mut self, v: &f32, spec: &FormatSpec) : Result
+            +write_f64(&mut self, v: &f64, spec: &FormatSpec) : Result
+            +write_i8(&mut self, v: &i8, spec: &FormatSpec) : Result
+            +write_i16(&mut self, v: &i16, spec: &FormatSpec) : Result
+            +write_i32(&mut self, v: &i32, spec: &FormatSpec) : Result
+            +write_i64(&mut self, v: &i64, spec: &FormatSpec) : Result
+            +write_u8(&mut self, v: &u8, spec: &FormatSpec) : Result
+            +write_u16(&mut self, v: &u16, spec: &FormatSpec) : Result
+            +write_u32(&mut self, v: &u32, spec: &FormatSpec) : Result
+            +write_u64(&mut self, v: &u64, spec: &FormatSpec) : Result
+            +write_str(&mut self, v: &str, spec: &FormatSpec) : Result
+        }
+
+        +class FormatSpec <<struct>> {
+            +display_hint(&mut self, display_hint: DisplayHint) : &mut Self
+            +fill(&mut self, fill: char) : &mut Self
+            +align(&mut self, align: Option<Alignment>) : &mut Self
+            +sign(&mut self, sign: Option<Sign>) : &mut Self
+            +alternate(&mut self, alternate: bool) : &mut Self
+            +zero_pad(&mut self, zero_pad: bool) : &mut Self
+            +debug_as_hex(&mut self, debug_as_hex: Option<DebugAsHex>) : &mut Self
+            +width(&mut self, width: Option<u16>) : &mut Self
+            +precision(&mut self, precision: Option<u16>) : &mut Self
+
+            +display_hint(&self) : DisplayHint
+            +fill(&self) : char
+            +align(&self) : Option<Alignment>
+            +sign(&self) : Option<Sign>
+            +alternate(&self) : bool
+            +zero_pad(&self) : bool
+            +debug_as_hex(&self) : Option<DebugAsHex>
+            +width(&self) : Option<u16>
+            +precision(&self) : Option<u16>
+        }
+
+        +class Placeholder<'a> <<struct>> {
+            +new_debug(value: &ScoreDebug, spec: FormatSpec) : Self
+            +new_display(value: &ScoreDisplay, spec: FormatSpec) : Self
+
+            +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+        }
+
+        FormatSpec *-- Placeholder
+
+        +enum Fragment<'a> <<enum>> {
+            Literal(&'a str)
+            Placeholder(Placeholder<'a>)
+        }
+
+        Fragment *-- Placeholder
+
+        +class Arguments<'a> <<struct>> {
+            +0: [Fragment<'a>]
+        }
+
+        Arguments *-- Fragment
+
+        +interface ScoreDebug <<trait>> {
+            +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+        }
+
+        +interface ScoreDisplay <<trait>> {
+            +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+        }
+
+        ' Placeholders are dependent on implementations provided by "Score*" traits.
+        Placeholder --> ScoreDebug
+        Placeholder --> ScoreDisplay
+
+        ' All trait implementations rely on "ScoreWrite".
+        ScoreDebug --> ScoreWrite
+        ScoreDisplay --> ScoreWrite
+
+        class mw_log_fmt <<module>> {
+            +write(output: &mut dyn ScoreWrite, args: Arguments<'_>) : Result
+
+            +score_write!(format_string: &str, args...) : Result
+            +score_writeln!(format_string: &str, args...) : Result
+        }
+
+        mw_log_fmt -- Arguments
+    }
+
+
+    mw_log -- Log
+    mw_log -- Level
+    mw_log -- LevelFilter
+    mw_log -- mw_log_macro
+    mw_log -- mw_log_fmt
+}
+
+
+
+@enduml

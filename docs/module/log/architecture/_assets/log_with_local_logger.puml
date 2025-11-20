@@ -1,0 +1,14 @@
+@startuml log_with_global_logger
+
+participant "User" as actor
+participant "<<component>> log" as frontend
+participant "<<component>> mw_log_subscriber" as backend
+
+actor -> frontend : Log message
+
+frontend -> backend : Log message
+backend --> frontend
+
+frontend --> actor
+
+@enduml

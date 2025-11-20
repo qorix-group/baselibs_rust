@@ -1,0 +1,36 @@
+@startuml log_error
+
+participant "User" as actor
+participant "`log!` macro" as log_macro
+participant "mw_log" as mw_log
+participant "mw_log_macro" as mw_log_macro
+participant "Logger" as logger
+
+actor -> log_macro : Log message with log level
+
+alt no-user-provided-logger
+    log_macro -> mw_log : Get global logger
+    mw_log --> log_macro : Logger
+end
+
+alt no-user-provided-target
+    log_macro -> mw_log : Get module path as target
+    mw_log --> log_macro : Module path
+end
+
+log_macro -> mw_log : Get max log level
+mw_log --> log_macro : Max log level
+
+alt log-level-check-failed
+    log_macro --> actor : Do not log, return control to caller
+
+else log-level-check-passed
+    log_macro -> mw_log_macro : Format arguments
+    mw_log_macro --> log_macro : Operation result
+
+    log_macro -> logger : Log formatted arguments
+    logger --> actor : Return control to caller
+
+end
+
+@enduml

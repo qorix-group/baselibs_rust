@@ -1,0 +1,12 @@
+@startuml log_to_level
+
+participant "User" as actor
+participant "Log to level macro\n(e.g., `error!`)" as log_to_level_macro
+participant "`log!` macro" as log_macro
+
+actor -> log_to_level_macro : Log message
+log_to_level_macro -> log_macro : Log message with given level
+log_macro --> actor
+
+
+@enduml

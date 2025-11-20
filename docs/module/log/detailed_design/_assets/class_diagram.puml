@@ -1,0 +1,240 @@
+@startuml class_diagram
+
+package "mw_log crate" {
+    note "Implementation of logging front-end.\nBased on 'log' library." as mw_log_desc
+
+    +interface Log <<trait>> {
+        +enabled(&self, metadata: &Metadata<_>) : bool
+        +log(&self, record: &Record) : ()
+        +flush(&self) : ()
+    }
+
+    +class Record<'a> <<struct>> {
+        -metadata: Metadata<'a>
+        -args: Arguments<'a>
+        -module_path: Option<MaybeStaticStr<'a>>
+        -file: Option<MaybeStaticStr<'a>>
+        -line: Option<u32>
+
+        +builder() : RecordBuilder
+        +args() : Arguments
+        +metadata() : Metadata
+        +level() : Level
+        +target() : String
+        +module_path() : Option<String>
+        +file() : Option<String>
+        +line() : Option<String>
+    }
+
+    +class Metadata<'a> <<struct>> {
+        -level: Level
+        -target: String
+
+        +builder(): MetadataBuilder
+        +level(): Level
+        +target(): String
+    }
+
+    Log *-- Record
+    Log *-- Metadata
+
+    +enum Level <<enum>> {
+        Fatal
+        Error
+        Warn
+        Info
+        Debug
+        Trace
+    }
+
+    +enum LevelFilter <<enum>> {
+        Off
+        Fatal
+        Error
+        Warn
+        Info
+        Debug
+        Trace
+    }
+
+    class mw_log <<module>> {
+        {static} -LOGGER: &dyn Log
+
+        +set_logger(logger: &'static dyn Log) : Result<(), SetLoggerError>
+        +set_max_level(level: LevelFilter) : ()
+        +max_level() : LevelFilter
+        +logger() : &'static dyn Log
+
+        +log!(target: &str, level: Level, ...) : ()
+        +log_enabled!(target: &str, level: Level) : bool
+        +fatal!(...) : ()
+        +error!(...) : ()
+        +warn!(...) : ()
+        +info!(...) : ()
+        +debug!(...) : ()
+        +trace!(...) : ()
+    }
+
+    note right: "Functions are used for global logger configuration.\n\n```rust\nlet logger = &ExampleLogger;\nset_logger(logger).unwrap();\nset_max_level(LevelFilter::Fatal);\n```\n\nMacros are used for logging.\n\n```rust\nlog!(logger: logger_instance, Level::Fatal, "FATAL");\ninfo!("INFO: {}", i);\nerror!(logger: logger_instance, "ERROR: {}", true);\n```\n"
+
+    mw_log -- Log
+    mw_log -- Level
+    mw_log -- LevelFilter
+}
+
+package "mw_log_fmt crate" {
+    note "Formatting interface, similar to 'std::fmt'.\nExpanded with support for non-string variables." as mw_log_fmt_desc
+
+    +class Error <<struct>> {
+        ' Empty.
+    }
+
+    +enum Result <<enum>> {
+        Ok(())
+        Err(Error)
+    }
+
+    Result *-- Error
+
+    +interface ScoreWrite <<trait>> {
+        +write_bool(&mut self, v: &bool, spec: &FormatSpec) : Result
+        +write_f32(&mut self, v: &f32, spec: &FormatSpec) : Result
+        +write_f64(&mut self, v: &f64, spec: &FormatSpec) : Result
+        +write_i8(&mut self, v: &i8, spec: &FormatSpec) : Result
+        +write_i16(&mut self, v: &i16, spec: &FormatSpec) : Result
+        +write_i32(&mut self, v: &i32, spec: &FormatSpec) : Result
+        +write_i64(&mut self, v: &i64, spec: &FormatSpec) : Result
+        +write_u8(&mut self, v: &u8, spec: &FormatSpec) : Result
+        +write_u16(&mut self, v: &u16, spec: &FormatSpec) : Result
+        +write_u32(&mut self, v: &u32, spec: &FormatSpec) : Result
+        +write_u64(&mut self, v: &u64, spec: &FormatSpec) : Result
+        +write_str(&mut self, v: &str, spec: &FormatSpec) : Result
+    }
+
+    +class FormatSpec <<struct>> {
+        -display_hint : DisplayHint
+        -fill : char
+        -align : Option<Alignment>
+        -sign : Option<Sign>
+        -alternate : bool
+        -zero_pad : bool
+        -debug_as_hex : Option<DebugAsHex>
+        -width : Option<u16>
+        -precision : Option<u16>
+
+        +display_hint(&mut self, display_hint: DisplayHint) : &mut Self
+        +fill(&mut self, fill: char) : &mut Self
+        +align(&mut self, align: Option<Alignment>) : &mut Self
+        +sign(&mut self, sign: Option<Sign>) : &mut Self
+        +alternate(&mut self, alternate: bool) : &mut Self
+        +zero_pad(&mut self, zero_pad: bool) : &mut Self
+        +debug_as_hex(&mut self, debug_as_hex: Option<DebugAsHex>) : &mut Self
+        +width(&mut self, width: Option<u16>) : &mut Self
+        +precision(&mut self, precision: Option<u16>) : &mut Self
+
+        +display_hint(&self) : DisplayHint
+        +fill(&self) : char
+        +align(&self) : Option<Alignment>
+        +sign(&self) : Option<Sign>
+        +alternate(&self) : bool
+        +zero_pad(&self) : bool
+        +debug_as_hex(&self) : Option<DebugAsHex>
+        +width(&self) : Option<u16>
+        +precision(&self) : Option<u16>
+    }
+
+    +class Placeholder<'a> <<struct>> {
+        -value: NonNull<()>
+        -formatter: fn(NonNull<()>, &mut dyn ScoreWrite, &FormatSpec) : Result
+        -spec: FormatSpec
+        -_lifetime: PhantomData<&'a ()>
+
+        +new_debug(value: &ScoreDebug, spec: FormatSpec) : Self
+        +new_display(value: &ScoreDisplay, spec: FormatSpec) : Self
+
+        +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+    }
+
+    FormatSpec *-- Placeholder
+
+    +enum Fragment<'a> <<enum>> {
+        Literal(&'a str)
+        Placeholder(Placeholder<'a>)
+    }
+
+    Fragment *-- Placeholder
+
+    +class Arguments<'a> <<struct>> {
+        +0: [Fragment<'a>]
+    }
+
+    Arguments *-- Fragment
+
+    +interface ScoreDebug <<trait>> {
+        +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+    }
+
+    +interface ScoreDisplay <<trait>> {
+        +fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) : Result
+    }
+
+    ' Placeholders are dependent on implementations provided by "Score*" traits.
+    Placeholder --> ScoreDebug
+    Placeholder --> ScoreDisplay
+
+    ' All trait implementations rely on "ScoreWrite".
+    ScoreDebug --> ScoreWrite
+    ScoreDisplay --> ScoreWrite
+
+    class mw_log_fmt <<module>> {
+        +write(output: &mut dyn ScoreWrite, args: Arguments<'_>) : Result
+
+        +score_write!(format_string: &str, args...) : Result
+        +score_writeln!(format_string: &str, args...) : Result
+    }
+    note right: "Provided macros can be used for implementing custom formatting traits.\n'''rust\nstruct Point {\n    x: i32,\n    y: i32,\n}\n\nimpl ScoreDebug for Point {\n    fn fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) -> Result {\n        score_write!(f, "[{}, {}]", self.x, self.y)\n    }\n}\n'''"
+
+    mw_log_fmt -- Result
+    mw_log_fmt -- Arguments
+}
+
+package "mw_log_macro crate" {
+    note "Procedural macro crate containing custom 'format_args' implementation, normally provided by Rust compiler.\nUsed by format string processing macros. Connections omitted for clarity." as mw_log_macro_desc
+
+    +class mw_log_macro <<module>> {
+        +mw_log_format_args!(format_string: &str, args...) : Arguments<'_>
+        +mw_log_format_args_nl!(format_string: &str, args...) : Arguments<'_>
+    }
+}
+
+package "mw_log_subscriber crate" {
+    note "Example of backend implementation." as mw_log_subscriber_desc
+
+    +class ExampleLog <<struct>> {
+        +enabled(&self, metadata: &Metadata<_>) : bool
+        +log(&self, record: &Record) : ()
+        +flush(&self) : ()
+    }
+
+    ExampleLog ..|> Log
+
+    +class ExampleScoreWrite <<struct>> {
+        +write_bool(&mut self, v: &bool, spec: &FormatSpec) : Result
+        +write_f32(&mut self, v: &f32, spec: &FormatSpec) : Result
+        +write_f64(&mut self, v: &f64, spec: &FormatSpec) : Result
+        +write_i8(&mut self, v: &i8, spec: &FormatSpec) : Result
+        +write_i16(&mut self, v: &i16, spec: &FormatSpec) : Result
+        +write_i32(&mut self, v: &i32, spec: &FormatSpec) : Result
+        +write_i64(&mut self, v: &i64, spec: &FormatSpec) : Result
+        +write_u8(&mut self, v: &u8, spec: &FormatSpec) : Result
+        +write_u16(&mut self, v: &u16, spec: &FormatSpec) : Result
+        +write_u32(&mut self, v: &u32, spec: &FormatSpec) : Result
+        +write_u64(&mut self, v: &u64, spec: &FormatSpec) : Result
+        +write_str(&mut self, v: &str, spec: &FormatSpec) : Result
+    }
+
+    ExampleScoreWrite ..|> ScoreWrite
+    ExampleLog *-- ExampleScoreWrite
+}
+
+@enduml
