@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "log"
+name = "mw_log_fmt"
 version = "0.0.1"

@@ -2,9 +2,9 @@
 resolver = "2"
 # Split to default members without tests and examples.
 # Used when executing cargo from project root.
-default-members = ["src/log"]
+default-members = ["src/log/mw_log_fmt"]
 # Include tests and examples as a member for IDE support and Bazel builds.
-members = ["src/log"]
+members = ["src/log/mw_log_fmt"]
 
 
 [workspace.package]
@@ -15,6 +15,7 @@ authors = ["S-CORE Contributors"]
 
 
 [workspace.dependencies]
+mw_log_fmt = { path = "src/log/mw_log_fmt" }
 
 
 [workspace.lints.clippy]

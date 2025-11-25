@@ -1,11 +1,9 @@
 [package]
-name = "log"
+name = "mw_log_fmt"
 version.workspace = true
-edition.workspace = true
-license-file.workspace = true
 authors.workspace = true
-
-[dependencies]
+readme.workspace = true
+edition.workspace = true
 
 [lints]
 workspace = true
