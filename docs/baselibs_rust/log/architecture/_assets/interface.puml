@@ -37,9 +37,8 @@ package log <<component>> {
         +trace!(...) : ()
     }
 
-    class mw_log_macro <<module>> {
+    class mw_log_fmt_macro <<module>> {
         +mw_log_format_args!(format_string: &str, args...) : Arguments<'_>
-        +mw_log_format_args_nl!(format_string: &str, args...) : Arguments<'_>
     }
 
     package mw_log_fmt {
@@ -51,13 +50,12 @@ package log <<component>> {
             +write(output: &mut dyn ScoreWrite, args: Arguments<'_>) : Result
 
             +score_write!(format_string: &str, args...) : Result
-            +score_writeln!(format_string: &str, args...) : Result
         }
     }
 
     mw_log -- Level
     mw_log -- LevelFilter
-    mw_log -- mw_log_macro
+    mw_log -- mw_log_fmt_macro
     mw_log -right- mw_log_fmt
 }
 
