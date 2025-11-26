@@ -16,8 +16,10 @@ rust_library(
     name = "mw_log_fmt",
     srcs = glob(["**/*.rs"]),
     crate_features = ["std"],
-    # TODO: expose required interface through `mw_log`.
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//src/log/mw_log:__pkg__",
+        "//src/log/mw_log_macro:__pkg__",
+    ],
 )
 
 rust_test(

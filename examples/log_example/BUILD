@@ -10,32 +10,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 # *******************************************************************************
-load("@rules_rust//rust:defs.bzl", "rust_proc_macro", "rust_test")
 
-rust_proc_macro(
-    name = "mw_log_macro",
-    srcs = glob(["*.rs"]),
-    visibility = ["//src/log/mw_log:__pkg__"],
-    deps = [
-        "//src/log/mw_log_fmt",
-        "@score_crates//:proc_macro2",
-        "@score_crates//:quote",
-        "@score_crates//:syn",
-    ],
-)
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-rust_test(
-    name = "tests",
-    srcs = glob(["tests/**/*.rs"]),
-    proc_macro_deps = [
-        "//src/log/mw_log_macro",
-    ],
-    tags = [
-        "unit_tests",
-        "ut",
-    ],
+rust_binary(
+    name = "log_example",
+    srcs = glob(["src/**/*.rs"]),
     deps = [
         "//src/log/mw_log",
-        "//src/log/mw_log_fmt",
     ],
 )

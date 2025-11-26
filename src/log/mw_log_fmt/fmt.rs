@@ -61,6 +61,7 @@ pub trait ScoreWrite {
 }
 
 /// Data placeholder in message.
+#[derive(Debug)]
 pub struct Placeholder<'a> {
     value: NonNull<()>,
     formatter: fn(NonNull<()>, Writer, &FormatSpec) -> Result,
@@ -122,6 +123,7 @@ impl<'a> Placeholder<'a> {
 
 /// Message fragment.
 /// A string literal or data placeholder.
+#[derive(Debug)]
 pub enum Fragment<'a> {
     /// Fragment is a string literal, with no additional formatting.
     Literal(&'a str),
@@ -131,7 +133,7 @@ pub enum Fragment<'a> {
 
 /// Array of message parts.
 /// Consists of [`Fragment`] entities.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Arguments<'a>(pub &'a [Fragment<'a>]);
 
 impl ScoreDebug for Arguments<'_> {

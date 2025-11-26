@@ -28,5 +28,8 @@ quote = "1"
 proc-macro2 = "1"
 mw_log_fmt.workspace = true
 
+[dev-dependencies]
+mw_log.workspace = true
+
 [lints]
 workspace = true
