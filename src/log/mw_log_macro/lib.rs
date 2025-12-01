@@ -27,10 +27,8 @@ use syn::{parse_macro_input, Error, Expr, ExprLit, ExprPath, Ident, Lit, Path, P
 /// Parse error containing reason.
 /// - Functions with access to tokens should return `syn::Error`
 /// - Other functions should return `ParseError` containing explanation.
-#[derive(Debug)]
 struct ParseError(pub String);
 
-#[derive(Debug)]
 enum Argument {
     Position,
     Index(usize),
@@ -50,7 +48,6 @@ fn parse_argument(s: &str) -> Result<Argument, ParseError> {
 }
 
 /// Formatting trait to be used.
-#[derive(Debug)]
 enum FmtTrait {
     Display,
     Debug,
@@ -315,7 +312,6 @@ fn tokenize_spec(spec: &FormatSpec) -> proc_macro2::TokenStream {
     }}
 }
 
-#[derive(Debug)]
 struct Placeholder {
     argument: Argument,
     fmt_trait: FmtTrait,
@@ -360,7 +356,6 @@ impl Placeholder {
     }
 }
 
-#[derive(Debug)]
 enum Spec {
     Literal(String),
     Placeholder(Placeholder),
@@ -488,7 +483,30 @@ fn validate_args(args: &[Expr]) -> Result<(), Error> {
         match arg {
             Expr::Assign(_) => named_found = true,
             // TODO: list of allowed expression types might not be complete!
-            Expr::Lit(_) | Expr::Field(_) | Expr::If(_) | Expr::Path(_) | Expr::Unary(_) => {
+            Expr::Array(_)
+            | Expr::Await(_)
+            | Expr::Binary(_)
+            | Expr::Block(_)
+            | Expr::Call(_)
+            | Expr::Cast(_)
+            | Expr::Field(_)
+            | Expr::If(_)
+            | Expr::Index(_)
+            | Expr::Lit(_)
+            | Expr::Macro(_)
+            | Expr::Match(_)
+            | Expr::MethodCall(_)
+            | Expr::Paren(_)
+            | Expr::Path(_)
+            | Expr::Range(_)
+            | Expr::RawAddr(_)
+            | Expr::Reference(_)
+            | Expr::Repeat(_)
+            | Expr::Struct(_)
+            | Expr::Try(_)
+            | Expr::Tuple(_)
+            | Expr::Unary(_)
+            | Expr::Unsafe(_) => {
                 if named_found {
                     return Err(Error::new_spanned(arg, "positional arguments must be before named arguments"));
                 }
@@ -541,7 +559,30 @@ fn select_arg_with_name(args: &[Expr], name: &str) -> Result<Expr, Error> {
     for arg in args.iter() {
         let (arg_expr, alias_expr) = match arg {
             Expr::Assign(expr_assign) => (expr_assign.left.as_ref().clone(), Some(expr_assign.right.as_ref().clone())),
-            Expr::Lit(_) | Expr::Field(_) | Expr::If(_) | Expr::Path(_) | Expr::Unary(_) => (arg.clone(), None),
+            Expr::Array(_)
+            | Expr::Await(_)
+            | Expr::Binary(_)
+            | Expr::Block(_)
+            | Expr::Call(_)
+            | Expr::Cast(_)
+            | Expr::Field(_)
+            | Expr::If(_)
+            | Expr::Index(_)
+            | Expr::Lit(_)
+            | Expr::Macro(_)
+            | Expr::Match(_)
+            | Expr::MethodCall(_)
+            | Expr::Paren(_)
+            | Expr::Path(_)
+            | Expr::Range(_)
+            | Expr::RawAddr(_)
+            | Expr::Reference(_)
+            | Expr::Repeat(_)
+            | Expr::Struct(_)
+            | Expr::Try(_)
+            | Expr::Tuple(_)
+            | Expr::Unary(_)
+            | Expr::Unsafe(_) => (arg.clone(), None),
             _ => return Err(Error::new_spanned(arg, "invalid expression type")),
         };
 

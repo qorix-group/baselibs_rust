@@ -93,7 +93,7 @@ impl Log for ExampleLogger {
 
         // Create writer and write log data.
         let mut writer = StringWriter::new();
-        write(&mut writer, *record.args()).unwrap();
+        let _ = write(&mut writer, *record.args());
 
         // Show to stderr.
         eprintln!("{}", writer.get());

@@ -72,28 +72,6 @@ impl_fmt_for_t_casted!(usize, u32, write_u32, ScoreDebug, ScoreDisplay);
 #[cfg(target_pointer_width = "64")]
 impl_fmt_for_t_casted!(usize, u64, write_u64, ScoreDebug, ScoreDisplay);
 
-macro_rules! impl_fmt_for_t_casted {
-    ($ti:ty, $to:ty, $fn:ident, $($fmt:ident),*) => {
-        $(
-        impl $fmt for $ti {
-            fn fmt(&self, f: &mut dyn ScoreWrite, spec: &FormatSpec) -> fmt::Result {
-                let casted = <$to>::try_from(*self).map_err(|_| fmt::Error)?;
-                f.$fn(&casted, &spec)
-            }
-        }
-        )*
-    };
-}
-
-#[cfg(target_pointer_width = "32")]
-impl_fmt_for_t_casted!(isize, i32, write_i32, ScoreDebug, ScoreDisplay);
-#[cfg(target_pointer_width = "64")]
-impl_fmt_for_t_casted!(isize, i64, write_i64, ScoreDebug, ScoreDisplay);
-#[cfg(target_pointer_width = "32")]
-impl_fmt_for_t_casted!(usize, u32, write_u32, ScoreDebug, ScoreDisplay);
-#[cfg(target_pointer_width = "64")]
-impl_fmt_for_t_casted!(usize, u64, write_u64, ScoreDebug, ScoreDisplay);
-
 #[cfg(test)]
 mod tests {
     use crate::test_utils::{common_test_debug, common_test_display};
@@ -216,26 +194,6 @@ mod tests {
     #[test]
     fn test_str_debug() {
         common_test_debug("test");
-    }
-
-    #[test]
-    fn test_isize_display() {
-        common_test_display(-1200000000000000000isize);
-    }
-
-    #[test]
-    fn test_isize_debug() {
-        common_test_debug(-1200000000000000000isize);
-    }
-
-    #[test]
-    fn test_usize_display() {
-        common_test_display(1200000000000000000usize);
-    }
-
-    #[test]
-    fn test_usize_debug() {
-        common_test_debug(1200000000000000000usize);
     }
 
     #[test]

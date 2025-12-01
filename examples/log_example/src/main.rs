@@ -21,7 +21,10 @@ use mw_log::{debug, error, fatal, info, trace, warn, LevelFilter};
 fn main() {
     // Initialize logger.
     mw_log::set_max_level(LevelFilter::Info);
-    mw_log::set_logger(&ExampleLogger).expect("Unable to set logger");
+    let result = mw_log::set_logger(&ExampleLogger);
+    if result.is_err() {
+        panic!("unable to set logger")
+    }
 
     // Example logs.
     trace!("trace log - hidden!");

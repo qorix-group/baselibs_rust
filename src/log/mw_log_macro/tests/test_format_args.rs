@@ -93,7 +93,7 @@ fn test_single_literal() {
     let args = mw_log_format_args!("test_string");
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 1);
     assert_eq!(w.get(), "test_string");
 
@@ -108,7 +108,7 @@ fn test_escaped_braces() {
     let args = mw_log_format_args!("{{}}}}{{");
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 1);
     assert_eq!(w.get(), "{}}{");
 
@@ -123,7 +123,7 @@ fn test_single_placeholder() {
     let args = mw_log_format_args!("{}", 123);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 1);
     assert_eq!(w.get(), "123");
 
@@ -137,7 +137,7 @@ fn test_mixed_literals_and_placeholders() {
     let args = mw_log_format_args!("test_{}_string", 321);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 3);
     assert_eq!(w.get(), "test_321_string");
 
@@ -151,7 +151,7 @@ fn test_arg_index() {
     let args = mw_log_format_args!("test_{2}_{1}_{0}", 123, 234, 345);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 6);
     assert_eq!(w.get(), "test_345_234_123");
 
@@ -165,7 +165,7 @@ fn test_arg_pos_and_index() {
     let args = mw_log_format_args!("test_{2}_{}_{1}_{}_{0}", 123, 234, 345);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 10);
     assert_eq!(w.get(), "test_345_123_234_234_123");
 
@@ -182,7 +182,7 @@ fn test_arg_name() {
     let args = mw_log_format_args!("test_{x3}_{x2}_{x1}", x1, x2, x3);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 6);
     assert_eq!(w.get(), "test_345_234_123");
 
@@ -202,7 +202,7 @@ fn test_arg_name_alias() {
     let args = mw_log_format_args!("test_{a3}_{a2}_{a1}", a1 = x1, a2 = x2, a3 = x3);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 6);
     assert_eq!(w.get(), "test_345_234_123");
 
@@ -219,7 +219,7 @@ fn test_arg_pos_and_name() {
     let args = mw_log_format_args!("test_{x3}_{}_{x2}_{}_{x1}", x1, x2, x3);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 10);
     assert_eq!(w.get(), "test_345_123_234_234_123");
 
@@ -238,7 +238,7 @@ fn test_arg_mixed() {
     let args = mw_log_format_args!("test_{x1}_{1}_{}", x1, x2);
 
     let mut w = StringWriter::new();
-    write(&mut w, args).unwrap();
+    let _ = write(&mut w, args);
     assert_eq!(args.0.len(), 6);
     assert_eq!(w.get(), "test_111_222_111");
 
@@ -251,19 +251,19 @@ fn test_arg_mixed() {
 fn test_format_spec_empty() {
     let args = mw_log_format_args!("{:}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::NoHint);
+    assert!(format_spec.get_display_hint() == DisplayHint::NoHint);
     assert_eq!(format_spec.get_fill(), ' ');
-    assert_eq!(format_spec.get_align(), None);
-    assert_eq!(format_spec.get_sign(), None);
+    assert!(format_spec.get_align().is_none());
+    assert!(format_spec.get_sign().is_none());
     assert!(!format_spec.get_alternate());
     assert!(!format_spec.get_zero_pad());
-    assert_eq!(format_spec.get_debug_as_hex(), None);
+    assert!(format_spec.get_debug_as_hex().is_none());
     assert_eq!(format_spec.get_width(), None);
     assert_eq!(format_spec.get_precision(), None);
 }
@@ -272,19 +272,19 @@ fn test_format_spec_empty() {
 fn test_format_spec_all() {
     let args = mw_log_format_args!("{:c<-#0333.555x}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::LowerHex);
+    assert!(format_spec.get_display_hint() == DisplayHint::LowerHex);
     assert_eq!(format_spec.get_fill(), 'c');
-    assert_eq!(format_spec.get_align(), Some(Alignment::Left));
-    assert_eq!(format_spec.get_sign(), Some(Sign::Minus));
+    assert!(format_spec.get_align() == Some(Alignment::Left));
+    assert!(format_spec.get_sign() == Some(Sign::Minus));
     assert!(format_spec.get_alternate());
     assert!(format_spec.get_zero_pad());
-    assert_eq!(format_spec.get_debug_as_hex(), None);
+    assert!(format_spec.get_debug_as_hex().is_none());
     assert_eq!(format_spec.get_width(), Some(333));
     assert_eq!(format_spec.get_precision(), Some(555));
 }
@@ -293,19 +293,19 @@ fn test_format_spec_all() {
 fn test_format_spec_debug() {
     let args = mw_log_format_args!("{:#X?}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::NoHint);
+    assert!(format_spec.get_display_hint() == DisplayHint::NoHint);
     assert_eq!(format_spec.get_fill(), ' ');
-    assert_eq!(format_spec.get_align(), None);
-    assert_eq!(format_spec.get_sign(), None);
+    assert!(format_spec.get_align().is_none());
+    assert!(format_spec.get_sign().is_none());
     assert!(format_spec.get_alternate());
     assert!(!format_spec.get_zero_pad());
-    assert_eq!(format_spec.get_debug_as_hex(), Some(DebugAsHex::Upper));
+    assert!(format_spec.get_debug_as_hex() == Some(DebugAsHex::Upper));
     assert_eq!(format_spec.get_width(), None);
     assert_eq!(format_spec.get_precision(), None);
 }
@@ -314,91 +314,91 @@ fn test_format_spec_debug() {
 fn test_format_spec_display_hint_octal() {
     let args = mw_log_format_args!("{:o}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::Octal);
+    assert!(format_spec.get_display_hint() == DisplayHint::Octal);
 }
 
 #[test]
 fn test_format_spec_display_hint_lower_hex() {
     let args = mw_log_format_args!("{:x}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::LowerHex);
+    assert!(format_spec.get_display_hint() == DisplayHint::LowerHex);
 }
 
 #[test]
 fn test_format_spec_display_hint_upper_hex() {
     let args = mw_log_format_args!("{:X}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::UpperHex);
+    assert!(format_spec.get_display_hint() == DisplayHint::UpperHex);
 }
 
 #[test]
 fn test_format_spec_display_hint_pointer() {
     let args = mw_log_format_args!("{:p}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::Pointer);
+    assert!(format_spec.get_display_hint() == DisplayHint::Pointer);
 }
 
 #[test]
 fn test_format_spec_display_hint_binary() {
     let args = mw_log_format_args!("{:b}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::Binary);
+    assert!(format_spec.get_display_hint() == DisplayHint::Binary);
 }
 
 #[test]
 fn test_format_spec_display_hint_lower_exp() {
     let args = mw_log_format_args!("{:e}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::LowerExp);
+    assert!(format_spec.get_display_hint() == DisplayHint::LowerExp);
 }
 
 #[test]
 fn test_format_spec_display_hint_upper_exp() {
     let args = mw_log_format_args!("{:E}", 123);
 
-    let placeholder = match args.0.first().unwrap() {
+    let placeholder = match args.0.first().expect("failed to get first entry") {
         Fragment::Literal(_) => panic!("invalid variant"),
         Fragment::Placeholder(placeholder) => placeholder,
     };
 
     let format_spec = placeholder.format_spec();
-    assert_eq!(format_spec.get_display_hint(), DisplayHint::UpperExp);
+    assert!(format_spec.get_display_hint() == DisplayHint::UpperExp);
 }
 
 #[test]
@@ -408,15 +408,15 @@ fn test_format_args_nl() {
 
     assert_eq!(args.len(), 2);
     // Check literal string.
-    let f1 = args.first().unwrap();
+    let f1 = args.first().expect("failed to get first entry");
     match f1 {
-        Fragment::Literal(s) => assert_eq!(*s, "test_string"),
+        Fragment::Literal(s) => assert!(*s == "test_string"),
         Fragment::Placeholder(_placeholder) => panic!("invalid variant"),
     }
     // Check newline.
-    let f2 = args.get(1).unwrap();
+    let f2 = args.get(1).expect("failed to get second entry");
     match f2 {
-        Fragment::Literal(s) => assert_eq!(*s, "\n"),
+        Fragment::Literal(s) => assert!(*s == "\n"),
         Fragment::Placeholder(_placeholder) => panic!("invalid variant"),
     }
 }

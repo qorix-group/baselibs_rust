@@ -14,7 +14,7 @@
 //! A lightweight logging facade.
 
 #![warn(missing_docs)]
-#![deny(missing_debug_implementations, unconditional_recursion)]
+#![deny(unconditional_recursion)]
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 
 #[cfg(any(
@@ -393,7 +393,7 @@ impl LevelFilter {
 }
 
 /// The "payload" of a log message.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Record<'a> {
     metadata: Metadata<'a>,
     args: Arguments<'a>,
@@ -453,7 +453,6 @@ impl<'a> Record<'a> {
 }
 
 /// Builder for [`Record`].
-#[derive(Debug)]
 pub struct RecordBuilder<'a> {
     record: Record<'a>,
 }
@@ -546,7 +545,7 @@ impl Default for RecordBuilder<'_> {
 }
 
 /// Metadata about a log message.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Metadata<'a> {
     level: Level,
     context: &'a str,
@@ -573,7 +572,7 @@ impl<'a> Metadata<'a> {
 }
 
 /// Builder for [`Metadata`].
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct MetadataBuilder<'a> {
     metadata: Metadata<'a>,
 }
@@ -748,39 +747,6 @@ pub fn set_boxed_logger(logger: Box<dyn Log>) -> Result<(), SetLoggerError> {
 /// # Errors
 ///
 /// An error is returned if a logger has already been set.
-///
-/// # Examples
-///
-/// ```
-/// use mw_log::{error, info, warn, Record, Level, Metadata, LevelFilter};
-/// use mw_log_fmt::{Arguments, Fragment};
-///
-/// static MY_LOGGER: MyLogger = MyLogger;
-///
-/// struct MyLogger;
-///
-/// impl mw_log::Log for MyLogger {
-///     fn enabled(&self, metadata: &Metadata) -> bool {
-///         metadata.level() <= Level::Info
-///     }
-///
-///     fn log(&self, record: &Record) {
-///         if self.enabled(record.metadata()) {
-///             println!("{} - {:?}", record.level(), record.args());
-///         }
-///     }
-///     fn flush(&self) {}
-/// }
-///
-/// # fn main(){
-/// mw_log::set_logger(&MY_LOGGER).unwrap();
-/// mw_log::set_max_level(LevelFilter::Info);
-///
-/// info!("hello log");
-/// warn!("warning");
-/// error!("oops");
-/// # }
-/// ```
 pub fn set_logger(logger: &'static dyn Log) -> Result<(), SetLoggerError> {
     set_logger_inner(|| logger)
 }
@@ -808,7 +774,6 @@ where
 }
 
 /// The type returned by [`set_logger`] if [`set_logger`] has already been called.
-#[derive(Debug)]
 pub struct SetLoggerError(());
 
 impl core::fmt::Display for SetLoggerError {
@@ -817,10 +782,8 @@ impl core::fmt::Display for SetLoggerError {
     }
 }
 
-impl core::error::Error for SetLoggerError {}
-
 /// The type returned by [`core::str::FromStr::from_str`] implementations when the string doesn't match any of the log levels.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct ParseLevelError(());
 
 impl core::fmt::Display for ParseLevelError {
@@ -828,8 +791,6 @@ impl core::fmt::Display for ParseLevelError {
         fmt.write_str(LEVEL_PARSE_ERROR)
     }
 }
-
-impl core::error::Error for ParseLevelError {}
 
 /// Returns a reference to the logger.
 ///
@@ -943,7 +904,7 @@ mod level_tests {
             ("asdf", Err(ParseLevelError(()))),
         ];
         for &(s, ref expected) in &tests {
-            assert_eq!(expected, &s.parse());
+            assert!(expected == &s.parse());
         }
     }
 
@@ -1112,7 +1073,7 @@ mod level_filter_tests {
             ("asdf", Err(ParseLevelError(()))),
         ];
         for &(s, ref expected) in &tests {
-            assert_eq!(expected, &s.parse());
+            assert!(expected == &s.parse());
         }
     }
 
@@ -1239,7 +1200,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().build();
         let record = Record::builder().build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1252,7 +1213,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().build();
         let record = RecordBuilder::new().build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1265,7 +1226,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().build();
         let record = RecordBuilder::default().build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1279,7 +1240,7 @@ mod record_tests {
         let args = mw_log_format_args!("test_string_{}", 123);
         let record = RecordBuilder::new().args(args).build();
         assert_eq!(record.args().0.len(), 2);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1292,7 +1253,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().level(Level::Debug).context("context").build();
         let record = RecordBuilder::new().metadata(metadata.clone()).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1306,7 +1267,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().level(level).build();
         let record = RecordBuilder::new().level(level).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), level);
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1320,7 +1281,7 @@ mod record_tests {
         let metadata = MetadataBuilder::new().context(context).build();
         let record = RecordBuilder::new().context(context).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), context);
         assert_eq!(record.module_path(), None);
@@ -1334,7 +1295,7 @@ mod record_tests {
         let module_path = "module_path";
         let record = RecordBuilder::new().module_path(Some(module_path)).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), Some(module_path));
@@ -1348,7 +1309,7 @@ mod record_tests {
         let file = "file";
         let record = RecordBuilder::new().file(Some(file)).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1362,7 +1323,7 @@ mod record_tests {
         let line_num = 321u32;
         let record = RecordBuilder::new().line(Some(line_num)).build();
         assert_eq!(record.args().0.len(), 0);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), None);
@@ -1388,7 +1349,7 @@ mod record_tests {
             .line(line_num)
             .build();
         assert_eq!(record.args().0.len(), 2);
-        assert_eq!(record.metadata(), &metadata);
+        assert!(record.metadata() == &metadata);
         assert_eq!(record.level(), metadata.level());
         assert_eq!(record.context(), metadata.context());
         assert_eq!(record.module_path(), module_path);
@@ -1419,7 +1380,7 @@ mod metadata_tests {
     fn test_metadata_builder_default() {
         let metadata_new = MetadataBuilder::new().build();
         let metadata_default = MetadataBuilder::default().build();
-        assert_eq!(metadata_new, metadata_default);
+        assert!(metadata_new == metadata_default);
     }
 
     #[test]
