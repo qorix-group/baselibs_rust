@@ -14,7 +14,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 rust_library(
     name = "mw_log",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(["**/*.rs"]),
     crate_features = ["std"],
     proc_macro_deps = [
         "//src/log/mw_log_macro",

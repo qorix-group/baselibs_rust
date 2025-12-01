@@ -5,6 +5,9 @@ authors.workspace = true
 readme.workspace = true
 edition.workspace = true
 
+[lib]
+path = "lib.rs"
+
 [features]
 max_level_off = []
 max_level_fatal = []
