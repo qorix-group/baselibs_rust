@@ -27,13 +27,28 @@ pub struct GenericVec<T, S: Storage<T>> {
 }
 
 impl<T, S: Storage<T>> GenericVec<T, S> {
-    /// Creates an empty vector.
+    /// Creates an empty vector with the given capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if not enough memory could be allocated.
     pub fn new(capacity: u32) -> Self {
         Self {
             len: 0,
             storage: S::new(capacity),
             _marker: PhantomData,
         }
+    }
+
+    /// Tries to create an empty vector with the given capacity.
+    ///
+    /// Returns `None` if not enough memory could be allocated.
+    pub fn try_new(capacity: u32) -> Option<Self> {
+        Some(Self {
+            len: 0,
+            storage: S::try_new(capacity)?,
+            _marker: PhantomData,
+        })
     }
 
     /// Extracts a slice containing the entire vector.
