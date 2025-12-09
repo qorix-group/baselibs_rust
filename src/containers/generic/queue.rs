@@ -11,10 +11,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::mem::needs_drop;
 use core::ops::Range;
 use core::ptr;
+use core::slice;
 
 use crate::InsufficientCapacity;
 use crate::storage::Storage;
@@ -120,6 +122,27 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
             // SAFETY: self.back_index() returned Some(), therefore back_index points to a valid (initialized) slot in the storage
             unsafe { self.storage.element_mut(back_index).assume_init_mut() }
         })
+    }
+
+    /// Returns a front-to-back iterator over the elements.
+    pub fn iter(&self) -> Iter<'_, T> {
+        let (first, second) = self.as_slices();
+        Iter {
+            first: first.iter(),
+            second: second.iter(),
+        }
+    }
+
+    /// Returns a front-to-back iterator over the mutable elements.
+    pub fn iter_mut(&mut self) -> IterMut<'_, T>
+    where
+        T: core::fmt::Debug,
+    {
+        let (first, second) = self.as_mut_slices();
+        IterMut {
+            first: first.iter_mut(),
+            second: second.iter_mut(),
+        }
     }
 
     /// Returns the maximum number of elements the queue can hold.
@@ -258,6 +281,108 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
     }
 }
 
+pub struct Iter<'a, T> {
+    first: slice::Iter<'a, T>,
+    second: slice::Iter<'a, T>,
+}
+
+// Manually implement Clone, because auto-derive would limit it to T: Clone
+impl<T> Clone for Iter<'_, T> {
+    fn clone(&self) -> Self {
+        Self {
+            first: self.first.clone(),
+            second: self.second.clone(),
+        }
+    }
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.first.next().or_else(|| {
+            // When one slice iterator is done, swap them and continue with the other iterator.
+            // This works repeatedly, because slice::Iter is fused.
+            core::mem::swap(&mut self.first, &mut self.second);
+            self.first.next()
+        })
+    }
+
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.second.next_back().or_else(|| {
+            // When one slice iterator is done, swap them and continue with the other iterator.
+            // This works repeatedly, because slice::Iter is fused.
+            core::mem::swap(&mut self.first, &mut self.second);
+            self.second.next_back()
+        })
+    }
+}
+
+impl<'a, T> ExactSizeIterator for Iter<'a, T> {
+    fn len(&self) -> usize {
+        self.first.len() + self.second.len()
+    }
+}
+
+impl<T> FusedIterator for Iter<'_, T> {}
+
+pub struct IterMut<'a, T> {
+    first: slice::IterMut<'a, T>,
+    second: slice::IterMut<'a, T>,
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.first.next().or_else(|| {
+            // When one slice iterator is done, swap them and continue with the other iterator.
+            // This works repeatedly, because slice::IterMut is fused.
+            core::mem::swap(&mut self.first, &mut self.second);
+            self.first.next()
+        })
+    }
+
+    fn last(mut self) -> Option<Self::Item> {
+        self.next_back()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+
+impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.second.next_back().or_else(|| {
+            // When one slice iterator is done, swap them and continue with the other iterator.
+            // This works repeatedly, because slice::IterMut is fused.
+            core::mem::swap(&mut self.first, &mut self.second);
+            self.second.next_back()
+        })
+    }
+}
+
+impl<'a, T> ExactSizeIterator for IterMut<'a, T> {
+    fn len(&self) -> usize {
+        self.first.len() + self.second.len()
+    }
+}
+
+impl<T> FusedIterator for IterMut<'_, T> {}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::VecDeque, mem::MaybeUninit};
@@ -305,6 +430,51 @@ mod tests {
                 queue.push_back(987).unwrap();
                 queue.pop_front().unwrap();
                 check_front_and_back(&mut queue, &mut control);
+            }
+        }
+
+        for i in 0..6 {
+            run_test(i);
+        }
+    }
+
+    #[test]
+    fn iter() {
+        fn check_iter(queue: &mut GenericQueue<i64, Vec<MaybeUninit<i64>>>, control: &mut VecDeque<i64>) {
+            // Test the Iterator::next() implementation:
+            assert_eq!(queue.iter().collect::<Vec<_>>(), control.iter().collect::<Vec<_>>());
+            assert_eq!(queue.iter_mut().collect::<Vec<_>>(), control.iter_mut().collect::<Vec<_>>());
+            // Test the DoubleEndedIterator::next_back() implementation:
+            assert_eq!(queue.iter().rev().collect::<Vec<_>>(), control.iter().rev().collect::<Vec<_>>());
+            assert_eq!(queue.iter_mut().rev().collect::<Vec<_>>(), control.iter_mut().rev().collect::<Vec<_>>());
+        }
+
+        fn run_test(n: usize) {
+            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let mut control = VecDeque::new();
+
+            // Completely fill and empty the queue n times, but move the internal start point
+            // ahead by one each time
+            for _ in 0..n {
+                check_iter(&mut queue, &mut control);
+
+                for i in 0..n {
+                    let value = i as i64 * 123 + 456;
+                    queue.push_back(value).unwrap();
+                    control.push_back(value);
+                    check_iter(&mut queue, &mut control);
+                }
+
+                for _ in 0..n {
+                    control.pop_front().unwrap();
+                    queue.pop_front().unwrap();
+                    check_iter(&mut queue, &mut control);
+                }
+
+                // One push and one pop to move the internal start point ahead
+                queue.push_back(987).unwrap();
+                queue.pop_front().unwrap();
+                check_iter(&mut queue, &mut control);
             }
         }
 
