@@ -23,7 +23,8 @@ use crate::InsufficientCapacity;
 pub struct GenericQueue<T, S: Storage<T>> {
     /// The current number of elements in the queue.
     len: u32,
-    /// The index of the next element to be returned by [`pop_front()`](Self::pop_front).
+    /// The index of the next element to be returned by [`pop_front()`](Self::pop_front);
+    /// this points to a valid element if and only if `self.len > 0`.
     front_index: u32,
     storage: S,
     _marker: PhantomData<T>,
@@ -79,6 +80,46 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
         let first = unsafe { &mut *self.storage.subslice_mut(first.start, first.end) };
         let second = unsafe { &mut *self.storage.subslice_mut(second.start, second.end) };
         (first, second)
+    }
+
+    /// Returns a reference to the front of the queue (the element which would be returned by [`pop_front()`](Self::pop_front)),
+    /// or None if the queue is empty.
+    pub fn front(&self) -> Option<&T> {
+        if self.len > 0 {
+            // SAFETY: self.len > 0, therefore self.front_index points to a valid (initialized) slot in the storage
+            Some(unsafe { self.storage.element(self.front_index).assume_init_ref() })
+        } else {
+            None
+        }
+    }
+
+    /// Returns a mutable reference to the front of the queue (the element which would be returned by [`pop_front()`](Self::pop_front)),
+    /// or None if the queue is empty.
+    pub fn front_mut(&mut self) -> Option<&mut T> {
+        if self.len > 0 {
+            // SAFETY: self.len > 0, therefore self.front_index points to a valid (initialized) slot in the storage
+            Some(unsafe { self.storage.element_mut(self.front_index).assume_init_mut() })
+        } else {
+            None
+        }
+    }
+
+    /// Returns a reference to the back of the queue (the element which would be returned by [`pop_back()`](Self::pop_back)),
+    /// or None if the queue is empty.
+    pub fn back(&self) -> Option<&T> {
+        self.back_index().map(|back_index| {
+            // SAFETY: self.back_index() returned Some(), therefore back_index points to a valid (initialized) slot in the storage
+            unsafe { self.storage.element(back_index).assume_init_ref() }
+        })
+    }
+
+    /// Returns a mutable reference to the back of the queue (the element which would be returned by [`pop_back()`](Self::pop_back)),
+    /// or None if the queue is empty.
+    pub fn back_mut(&mut self) -> Option<&mut T> {
+        self.back_index().map(|back_index| {
+            // SAFETY: self.back_index() returned Some(), therefore back_index points to a valid (initialized) slot in the storage
+            unsafe { self.storage.element_mut(back_index).assume_init_mut() }
+        })
     }
 
     /// Returns the maximum number of elements the queue can hold.
@@ -164,14 +205,7 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
     ///
     /// If the queue has at least one element, the pop succeeds; otherwise, `None` is returned.
     pub fn pop_back(&mut self) -> Option<T> {
-        let capacity = self.storage.capacity();
-        if self.len > 0 {
-            let read_pos = self.front_index as u64 + (self.len as u64 - 1);
-            let read_pos = if read_pos < capacity as u64 {
-                read_pos as u32
-            } else {
-                (read_pos - capacity as u64) as u32
-            };
+        if let Some(read_pos) = self.back_index() {
             self.len -= 1;
             Some(unsafe { self.storage.element(read_pos).assume_init_read() })
         } else {
@@ -193,6 +227,7 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
         }
     }
 
+    /// Computes the bounds of the two slices containing the queue's contents, in order.
     fn slice_ranges(&self) -> (Range<u32>, Range<u32>) {
         // Cast to u64 to avoid overflow
         let end = self.front_index as u64 + self.len as u64;
@@ -203,6 +238,22 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
         } else {
             let end = end as u32;
             (self.front_index..end, end..end)
+        }
+    }
+
+    /// Returns the index of the last element (the one which would be returned by [`pop_back()`](Self::pop_back)),
+    /// or `None` if the queue is empty.
+    fn back_index(&self) -> Option<u32> {
+        if self.len > 0 {
+            let capacity = self.storage.capacity() as u64;
+            let read_pos = self.front_index as u64 + (self.len as u64 - 1);
+            if read_pos < capacity {
+                Some(read_pos as u32)
+            } else {
+                Some((read_pos - capacity) as u32)
+            }
+        } else {
+            None
         }
     }
 }
@@ -217,6 +268,49 @@ mod tests {
         let mut elements = first.to_vec();
         elements.extend_from_slice(second);
         elements
+    }
+
+    #[test]
+    fn front_and_back() {
+        fn check_front_and_back(queue: &mut GenericQueue<i64, Vec<MaybeUninit<i64>>>, control: &mut VecDeque<i64>) {
+            assert_eq!(queue.front(), control.front());
+            assert_eq!(queue.front_mut(), control.front_mut());
+            assert_eq!(queue.back(), control.back());
+            assert_eq!(queue.back_mut(), control.back_mut());
+        }
+
+        fn run_test(n: usize) {
+            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let mut control = VecDeque::new();
+
+            // Completely fill and empty the queue n times, but move the internal start point
+            // ahead by one each time
+            for _ in 0..n {
+                check_front_and_back(&mut queue, &mut control);
+
+                for i in 0..n {
+                    let value = i as i64 * 123 + 456;
+                    queue.push_back(value).unwrap();
+                    control.push_back(value);
+                    check_front_and_back(&mut queue, &mut control);
+                }
+
+                for _ in 0..n {
+                    control.pop_front().unwrap();
+                    queue.pop_front().unwrap();
+                    check_front_and_back(&mut queue, &mut control);
+                }
+
+                // One push and one pop to move the internal start point ahead
+                queue.push_back(987).unwrap();
+                queue.pop_front().unwrap();
+                check_front_and_back(&mut queue, &mut control);
+            }
+        }
+
+        for i in 0..6 {
+            run_test(i);
+        }
     }
 
     #[test]
