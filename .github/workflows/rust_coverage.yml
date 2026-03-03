@@ -22,6 +22,7 @@ jobs:
     with:
       bazel-test-targets: "//src/..."
       bazel-test-config-flags: "--config=ferrocene-coverage"
-      coverage-target: "//:rust_coverage"
+      bazel-test-args: "--nocache_test_results --lockfile_mode=error"
+      coverage-target: "--lockfile_mode=error //:rust_coverage"
       min-coverage: 0
       coverage-artifact-name: "rust-coverage-html"

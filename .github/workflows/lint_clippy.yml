@@ -28,3 +28,4 @@ jobs:
     with:
       bazel-targets: "//src/..."
       bazel-config: "lint"
+      bazel-args: "--lockfile_mode=error"
