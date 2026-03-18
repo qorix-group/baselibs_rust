@@ -14,8 +14,10 @@
 //! Minimal POSIX adaptation layer.
 
 mod affinity;
+mod errno;
 
 pub use affinity::{get_affinity, set_affinity, CpuSet};
+pub use errno::errno;
 
 pub use libc::{
     c_int, c_ulong, c_void, pid_t, pthread_attr_destroy, pthread_attr_getstacksize, pthread_attr_init,
@@ -26,13 +28,10 @@ pub use libc::{
 
 #[cfg(target_os = "linux")]
 pub use libc::{
-    cpu_set_t, pthread_attr_getinheritsched, pthread_attr_getschedparam, pthread_attr_getschedpolicy,
-    pthread_attr_setinheritsched, pthread_attr_setschedparam, pthread_attr_setschedpolicy, sched_getaffinity,
-    sched_setaffinity, CPU_ISSET, CPU_SET, PTHREAD_EXPLICIT_SCHED, PTHREAD_INHERIT_SCHED,
+    pthread_attr_getinheritsched, pthread_attr_getschedparam, pthread_attr_getschedpolicy,
+    pthread_attr_setinheritsched, pthread_attr_setschedparam, pthread_attr_setschedpolicy, PTHREAD_EXPLICIT_SCHED,
+    PTHREAD_INHERIT_SCHED,
 };
-
-#[cfg(target_os = "nto")]
-pub use libc::{ThreadCtl, _NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT};
 
 #[cfg(target_os = "nto")]
 pub const PTHREAD_INHERIT_SCHED: c_int = 0;

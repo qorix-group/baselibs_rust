@@ -12,9 +12,11 @@
 // *******************************************************************************
 
 use crate::parameters::{SchedulerPolicy, ThreadParameters};
-use core::marker::PhantomData;
+use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
+use core::ptr::null_mut;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 
 /// `pthread` attributes object.
 struct Attributes {
@@ -25,17 +27,20 @@ impl Attributes {
     /// Create `pthread` attributes object.
     fn new() -> Self {
         let mut attr = MaybeUninit::uninit();
+        // SAFETY: initializes `attr`, pointer is ensured to be valid.
         let rc = unsafe { pal::pthread_attr_init(attr.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_init failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_init failed, rc: {rc}");
 
+        // SAFETY: `attr` is initialized by a `pthread_attr_init` call.
         let attr_handle = unsafe { attr.assume_init() };
         Self { attr_handle }
     }
 
     /// Pointer to mutable internal handle.
     fn ptr(&mut self) -> *mut pal::pthread_attr_t {
+        // SAFETY:
+        // Handle is initialized during object construction.
+        // Pointer is ensured to be valid.
         &mut self.attr_handle as *mut _
     }
 
@@ -46,47 +51,46 @@ impl Attributes {
         } else {
             pal::PTHREAD_EXPLICIT_SCHED
         };
+
+        // SAFETY: value is ensured to be valid.
         let rc = unsafe { pal::pthread_attr_setinheritsched(self.ptr(), inherit_native) };
-        if rc != 0 {
-            panic!("pthread_attr_setinheritsched failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_setinheritsched failed, rc: {rc}");
     }
 
     /// Set thread priority.
     fn priority(&mut self, priority: i32) {
         let mut params = MaybeUninit::uninit();
         // Create `sched_param` struct.
+        // SAFETY: initializes `params`, pointer is ensured to be valid.
         let rc = unsafe { pal::pthread_attr_getschedparam(self.ptr(), params.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_getschedparam failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_getschedparam failed, rc: {rc}");
 
         // Store and modify `sched_param` struct.
+        // SAFETY: `params` is initialized by a `pthread_attr_getschedparam` call.
         let mut params = unsafe { params.assume_init() };
         params.sched_priority = priority;
 
         // Set modified `sched_param`.
-        let rc = unsafe { pal::pthread_attr_setschedparam(self.ptr(), &params as *const _) };
-        if rc != 0 {
-            panic!("pthread_attr_setschedparam failed, rc: {rc}");
-        }
+        // SAFETY:
+        // `params` is initialized by a `pthread_attr_getschedparam` call.
+        // Pointer is ensured to be valid.
+        let rc = unsafe { pal::pthread_attr_setschedparam(self.ptr(), &params) };
+        assert!(rc == 0, "pthread_attr_setschedparam failed, rc: {rc}");
     }
 
     /// Set scheduler policy.
     fn scheduler_policy(&mut self, scheduler_policy: SchedulerPolicy) {
         let policy = scheduler_policy as i32;
+        // SAFETY: `policy` value is ensured to be valid.
         let rc = unsafe { pal::pthread_attr_setschedpolicy(self.ptr(), policy) };
-        if rc != 0 {
-            panic!("pthread_attr_setschedpolicy failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_setschedpolicy failed, rc: {rc}");
     }
 
     /// Set stack size.
     fn stack_size(&mut self, stack_size: usize) {
+        // SAFETY: `stack_size` type is valid, invalid value will cause abort.
         let rc = unsafe { pal::pthread_attr_setstacksize(self.ptr(), stack_size) };
-        if rc != 0 {
-            panic!("pthread_attr_setstacksize failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_setstacksize failed, rc: {rc}");
     }
 
     /// Get reference to inner handle.
@@ -97,14 +101,13 @@ impl Attributes {
 
 impl Drop for Attributes {
     fn drop(&mut self) {
+        // SAFETY: after drop handle is no longer needed and can be destructed.
         let rc = unsafe { pal::pthread_attr_destroy(self.ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_destroy failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_destroy failed, rc: {rc}");
     }
 }
 
-struct ThreadData<T, F: FnOnce() -> T> {
+struct ThreadData<F: FnOnce()> {
     f: F,
 }
 
@@ -114,78 +117,142 @@ struct Thread {
 }
 
 impl Thread {
-    fn new<T, F>(attributes: Attributes, f: F) -> Self
+    fn new<F>(attributes: Attributes, f: F) -> Self
     where
-        F: FnOnce() -> T + Send + 'static,
-        T: Send + 'static,
+        F: FnOnce() + Send + 'static,
     {
         let mut thread_handle = MaybeUninit::uninit();
 
-        extern "C" fn start_routine<T, F: FnOnce() -> T>(data: *mut pal::c_void) -> *mut pal::c_void {
-            let data: Box<ThreadData<T, F>> = unsafe { Box::from_raw(data.cast()) };
-            let result = catch_unwind(AssertUnwindSafe(move || (data.f)()));
-            match result {
-                Ok(value) => Box::into_raw(Box::new(value)).cast(),
-                Err(_) => std::process::abort(),
-            }
+        // SAFETY:
+        // It is safe to use `extern "C"`.
+        // Provided callback is a wrapper containing panic handling.
+        extern "C" fn start_routine<F: FnOnce()>(data: *mut pal::c_void) -> *mut pal::c_void {
+            // SAFETY:
+            // `data` is ensured to be valid - it is boxed right before `pthread_create`.
+            // On `pthread_create` failure it is deallocated during error handling.
+            let data: Box<ThreadData<F>> = unsafe { Box::from_raw(data.cast()) };
+            (data.f)();
+            null_mut()
         }
 
         let data = Box::into_raw(Box::new(ThreadData { f }));
+        // SAFETY:
+        // Initializes `thread_handle`.
+        // Validity of all pointers is ensured.
         let rc = unsafe {
             pal::pthread_create(
                 thread_handle.as_mut_ptr(),
-                attributes.get() as *const _,
-                start_routine::<T, F>,
-                data as *mut _,
+                attributes.get(),
+                start_routine::<F>,
+                data.cast(),
             )
         };
         if rc != 0 {
-            // Drop manually managed `ThreadData`.
-            unsafe { drop(Box::from_raw(data)) };
+            // Reobtain and drop `ThreadData`.
+            // SAFETY:
+            // `data` is ensured to be valid - it is boxed right before `pthread_create`.
+            // On `pthread_create` success it is deallocated after `start_routine` finishes.
+            let _ = unsafe { Box::from_raw(data) };
             panic!("pthread_create failed, rc: {rc}");
         }
 
         Self {
+            // SAFETY: `thread_handle` is initialized by a `pthread_create` call.
             thread_handle: unsafe { thread_handle.assume_init() },
         }
     }
 }
 
-/// An owned permission to join on a thread (block on its termination).
-pub struct JoinHandle<T> {
-    thread: Thread,
-    _marker: PhantomData<T>,
+/// A specialized [`Result`] type for threads.
+/// Indicates the manner in which a thread exited.
+pub type Result = core::result::Result<(), Box<dyn core::any::Any + Send + 'static>>;
+
+/// Packet containing thread result.
+///
+/// No need for a mutex because synchronization happens with [`JoinHandle::join`].
+/// The caller will never read this packet until the thread has exited.
+struct Packet(UnsafeCell<Option<Result>>);
+
+impl Packet {
+    fn new() -> Self {
+        Self(UnsafeCell::new(None))
+    }
 }
 
-impl<T> JoinHandle<T> {
-    fn new(thread: Thread) -> Self {
-        Self {
-            thread,
-            _marker: PhantomData,
+// SAFETY:
+// Due to the usage of `UnsafeCell` manual implementation of `Sync` is required.
+// The caller will never read this packet until the thread has exited.
+// This is based on `std::thread` implementation.
+unsafe impl Sync for Packet {}
+
+impl Drop for Packet {
+    fn drop(&mut self) {
+        // Make sure that panic was handled.
+        if let Some(result) = self.0.get_mut() {
+            if result.is_err() {
+                panic!("unhandled panic occurred in a thread")
+            }
         }
+    }
+}
+
+/// Inner representation for [`JoinHandle`].
+pub struct JoinInner {
+    thread: Thread,
+    packet: Arc<Packet>,
+}
+
+impl JoinInner {
+    fn new(thread: Thread, packet: Arc<Packet>) -> Self {
+        Self { thread, packet }
     }
 
     /// Wait for the associated thread to finish.
     ///
     /// This function will return immediately if the associated thread has already finished.
-    pub fn join(self) -> T {
-        let mut result = MaybeUninit::<*mut pal::c_void>::uninit();
-        let thread_handle = self.thread.thread_handle;
-        let rc = unsafe { pal::pthread_join(thread_handle, result.as_mut_ptr().cast()) };
-        if rc != 0 {
-            panic!("pthread_join failed, rc: {rc}");
-        }
+    pub fn join(mut self) -> Result {
+        self.join_internal();
+        Arc::get_mut(&mut self.packet).unwrap().0.get_mut().take().unwrap()
+    }
 
-        let result_box = unsafe { Box::from_raw(result.assume_init().cast()) };
-        *result_box
+    fn join_internal(&self) {
+        // Perform join.
+        let thread_handle = self.thread.thread_handle;
+        // SAFETY: `thread_handle` is ensured to be valid.
+        let rc = unsafe { pal::pthread_join(thread_handle, null_mut()) };
+        assert!(rc == 0, "pthread_join failed, rc: {rc}");
+    }
+}
+
+impl Drop for JoinInner {
+    fn drop(&mut self) {
+        // Check ref count of `Packet`.
+        // A single reference indicates thread has already finished and instance is no longer shared.
+        let finished = Arc::strong_count(&self.packet) <= 1;
+        if !finished {
+            self.join_internal();
+        }
+    }
+}
+
+/// An owned permission to join on a thread (block on its termination).
+///
+/// Thread is joined on [`Self::join`] and [`drop`] (if still joinable).
+pub struct JoinHandle(JoinInner);
+
+impl JoinHandle {
+    /// Wait for the associated thread to finish.
+    ///
+    /// This function will return immediately if the associated thread has already finished.
+    pub fn join(self) -> Result {
+        self.0.join()
     }
 }
 
 /// Spawn a new thread, returning [`JoinHandle`] for it.
-pub fn spawn<F, T>(f: F, thread_parameters: ThreadParameters) -> JoinHandle<T>
+pub fn spawn<F>(f: F, thread_parameters: ThreadParameters) -> JoinHandle
 where
-    F: FnOnce() -> T + Send + 'static,
-    T: Send + 'static,
+    F: FnOnce() + Send + 'static,
 {
     // Construct attributes based on provided parameters.
     let mut attributes = Attributes::new();
@@ -199,24 +266,31 @@ where
         attributes.stack_size(stack_size);
     }
 
-    // Construct CPU set to be used by affinity setup.
-    let cpu_set = thread_parameters.affinity.map(|affinity| pal::CpuSet::new(&affinity));
+    // Construct a wrapper containing affinity configuration and panic handling.
+    let packet = Arc::new(Packet::new());
+    let packet_clone = packet.clone();
+    let thread_wrapper = move || {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            // Set affinity.
+            if let Some(cpu_set) = thread_parameters.affinity {
+                pal::set_affinity(cpu_set);
+            }
 
-    // Construct a function wrapper containing affinity configuration.
-    let fn_wrapper = move || {
-        if let Some(cpu_set) = cpu_set {
-            pal::set_affinity(cpu_set);
+            // Execute function.
+            f()
+        }));
+        // SAFETY: this is the only mutation of `UnsafeCell` until `Packet::drop`.
+        unsafe {
+            *packet_clone.0.get() = Some(result);
         }
-
-        f()
     };
 
     // Create a `Thread` and place it in a `JoinHandle`.
-    let thread = Thread::new(attributes, fn_wrapper);
-    JoinHandle::new(thread)
+    let thread = Thread::new(attributes, thread_wrapper);
+    JoinHandle(JoinInner::new(thread, packet))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
     use crate::parameters::{SchedulerParameters, SchedulerPolicy, ThreadParameters};
     use crate::thread::{spawn, Attributes};
@@ -227,9 +301,7 @@ mod tests {
     fn attr_inherit_scheduling_attributes(attrs: &Attributes) -> bool {
         let mut native = MaybeUninit::uninit();
         let rc = unsafe { pal::pthread_attr_getinheritsched(attrs.get(), native.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_getinheritsched failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_getinheritsched failed, rc: {rc}");
 
         match unsafe { native.assume_init() } {
             pal::PTHREAD_INHERIT_SCHED => true,
@@ -241,9 +313,7 @@ mod tests {
     fn attr_priority(attrs: &Attributes) -> i32 {
         let mut param_native = MaybeUninit::uninit();
         let rc = unsafe { pal::pthread_attr_getschedparam(attrs.get(), param_native.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_getschedparam failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_getschedparam failed, rc: {rc}");
 
         unsafe { param_native.assume_init().sched_priority }
     }
@@ -251,19 +321,15 @@ mod tests {
     fn attr_policy(attrs: &Attributes) -> SchedulerPolicy {
         let mut policy_native = MaybeUninit::uninit();
         let rc = unsafe { pal::pthread_attr_getschedpolicy(attrs.get(), policy_native.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_getschedpolicy failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_getschedpolicy failed, rc: {rc}");
 
-        SchedulerPolicy::from(unsafe { policy_native.assume_init() })
+        SchedulerPolicy::try_from(unsafe { policy_native.assume_init() }).unwrap()
     }
 
     fn attr_stack_size(attrs: &Attributes) -> usize {
         let mut stack_size = MaybeUninit::uninit();
         let rc = unsafe { pal::pthread_attr_getstacksize(attrs.get(), stack_size.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_attr_getstacksize failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_attr_getstacksize failed, rc: {rc}");
 
         unsafe { stack_size.assume_init() }
     }
@@ -295,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "pthread_attr_setschedparam failed, rc: 22")]
+    #[should_panic(expected = "pthread_attr_setschedparam failed, rc:")]
     fn attributes_priority_wrong_scheduler_policy() {
         let mut attrs = Attributes::new();
         attrs.priority(50);
@@ -319,27 +385,65 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "pthread_attr_setstacksize failed, rc: 22")]
+    #[should_panic(expected = "pthread_attr_setstacksize failed, rc:")]
     fn attributes_stack_size_too_small() {
         let mut attrs = Attributes::new();
         attrs.stack_size(4 * 1024);
     }
 
     #[test]
-    fn spawn_succeeds() {
+    fn spawn_joined_succeeds() {
         let thread_parameters = ThreadParameters::default();
         let (tx, rx) = channel();
         let join_handle = spawn(
             move || {
                 tx.send(654321).unwrap();
-                123
             },
             thread_parameters,
         );
-        let join_result = join_handle.join();
+        let result = join_handle.join();
 
-        assert_eq!(join_result, 123);
+        assert!(result.is_ok());
         assert_eq!(rx.recv().unwrap(), 654321)
+    }
+
+    #[test]
+    fn spawn_not_joined_succeeds() {
+        let thread_parameters = ThreadParameters::default();
+        let (tx, rx) = channel();
+        let _ = spawn(
+            move || {
+                tx.send(654321).unwrap();
+            },
+            thread_parameters,
+        );
+
+        assert_eq!(rx.recv().unwrap(), 654321)
+    }
+
+    #[test]
+    fn spawn_joined_panics() {
+        let thread_parameters = ThreadParameters::default();
+        let join_handle = spawn(
+            move || {
+                panic!("internal panic");
+            },
+            thread_parameters,
+        );
+        let result = join_handle.join();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "unhandled panic occurred in a thread")]
+    fn spawn_not_joined_panics() {
+        let thread_parameters = ThreadParameters::default();
+        let _ = spawn(
+            move || {
+                panic!("internal panic");
+            },
+            thread_parameters,
+        );
     }
 
     fn current_sched_params() -> (SchedulerPolicy, i32) {
@@ -347,16 +451,14 @@ mod tests {
         let mut policy = MaybeUninit::uninit();
         let mut param = MaybeUninit::uninit();
         let rc = unsafe { pal::pthread_getschedparam(thread, policy.as_mut_ptr(), param.as_mut_ptr()) };
-        if rc != 0 {
-            panic!("pthread_getschedparam failed, rc: {rc}");
-        }
+        assert!(rc == 0, "pthread_getschedparam failed, rc: {rc}");
 
         let policy_native = unsafe { policy.assume_init() };
         let scheduler_policy = match policy_native {
-            0 => SchedulerPolicy::Other,
-            1 => SchedulerPolicy::Fifo,
-            2 => SchedulerPolicy::RoundRobin,
-            _ => panic!("Unknown scheduler type"),
+            pal::SCHED_OTHER => SchedulerPolicy::Other,
+            pal::SCHED_FIFO => SchedulerPolicy::Fifo,
+            pal::SCHED_RR => SchedulerPolicy::RoundRobin,
+            _ => panic!("unknown scheduler type"),
         };
 
         let priority = unsafe { param.assume_init().sched_priority };
@@ -377,7 +479,8 @@ mod tests {
             },
             thread_parameters,
         );
-        join_handle.join();
+        let result = join_handle.join();
+        assert!(result.is_ok());
 
         let (scheduler_policy, priority) = rx.recv().unwrap();
         assert_eq!(scheduler_policy, exp_scheduler_parameters.policy());
@@ -396,9 +499,10 @@ mod tests {
             },
             thread_parameters,
         );
-        join_handle.join();
+        let result = join_handle.join();
+        assert!(result.is_ok());
 
-        assert_eq!(rx.recv().unwrap(), exp_affinity);
+        assert_eq!(rx.recv().unwrap().iter().copied().collect::<Vec<_>>(), exp_affinity);
     }
 
     #[test]
@@ -419,6 +523,7 @@ mod tests {
             },
             thread_parameters,
         );
-        join_handle.join();
+        let result = join_handle.join();
+        assert!(result.is_ok());
     }
 }

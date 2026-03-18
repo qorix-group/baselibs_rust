@@ -50,6 +50,7 @@ authors = ["S-CORE Contributors"]
 [workspace.dependencies]
 libc = "0.2.177"
 
+containers = { path = "src/containers" }
 score_log = { path = "src/log/score_log" }
 score_log_fmt = { path = "src/log/score_log_fmt" }
 score_log_fmt_macro = { path = "src/log/score_log_fmt_macro" }

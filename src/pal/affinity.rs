@@ -14,14 +14,24 @@
 //! Affinity handling differs between Linux and QNX.
 //! Module ensures similar behavior between both OSes.
 
+use crate::errno;
+use containers::fixed_capacity::FixedCapacityVec;
+use score_log::ScoreDebug;
+
+#[cfg(target_os = "linux")]
+use libc::{cpu_set_t, sched_getaffinity, sched_setaffinity};
+
+#[cfg(target_os = "nto")]
+use libc::{ThreadCtl, _NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT};
+
 const MAX_CPU_NUM: usize = 1024;
-const MAX_CPU_ID: usize = MAX_CPU_NUM - 1;
+const CPU_MASK_SIZE: usize = MAX_CPU_NUM / (u8::BITS as usize);
 
 /// Common CPU set representation.
 /// Limited to 1024 CPUs.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, ScoreDebug, PartialEq, Eq)]
 pub struct CpuSet {
-    mask: [u8; 128],
+    mask: [u8; CPU_MASK_SIZE],
 }
 
 impl CpuSet {
@@ -32,12 +42,14 @@ impl CpuSet {
     }
 
     /// Create mask based on provided list.
-    fn create_mask(affinity: &[usize]) -> [u8; 128] {
+    fn create_mask(affinity: &[usize]) -> [u8; CPU_MASK_SIZE] {
         let mut mask = [0u8; _];
         for cpu_id in affinity.iter().copied() {
-            if cpu_id > MAX_CPU_ID {
-                panic!("CPU ID provided to affinity exceeds max supported size, provided: {cpu_id}, max: {MAX_CPU_ID}");
-            }
+            const MAX_CPU_ID: usize = MAX_CPU_NUM - 1;
+            assert!(
+                cpu_id <= MAX_CPU_ID,
+                "CPU ID provided to affinity exceeds max supported size, provided: {cpu_id}, max: {MAX_CPU_ID}"
+            );
 
             let index = cpu_id / 8;
             let offset = cpu_id % 8;
@@ -48,14 +60,15 @@ impl CpuSet {
     }
 
     /// Create list based on provided mask.
-    fn create_list(mask: &[u8; 128]) -> Vec<usize> {
-        let mut list = Vec::new();
+    fn create_list(mask: &[u8; CPU_MASK_SIZE]) -> FixedCapacityVec<usize> {
+        let mut list = FixedCapacityVec::new(MAX_CPU_NUM);
         for cpu_id in 0..MAX_CPU_NUM {
             let index = cpu_id / 8;
             let offset = cpu_id % 8;
 
             if (mask[index] & (1 << offset)) != 0 {
-                list.push(cpu_id);
+                // Error should not occur, since capacity is matching the mask size.
+                list.push(cpu_id).expect("failed to push CPU ID to the list");
             }
         }
 
@@ -66,22 +79,34 @@ impl CpuSet {
         self.mask = Self::create_mask(affinity);
     }
 
-    pub fn get(&self) -> Vec<usize> {
+    pub fn get(&self) -> FixedCapacityVec<usize> {
         Self::create_list(&self.mask)
     }
 }
 
 #[cfg(target_os = "linux")]
-impl From<crate::cpu_set_t> for CpuSet {
-    fn from(value: crate::cpu_set_t) -> Self {
-        let mask: [u8; 128] = unsafe { core::mem::transmute(value) };
+impl From<cpu_set_t> for CpuSet {
+    fn from(value: cpu_set_t) -> Self {
+        assert!(
+            core::mem::size_of::<cpu_set_t>() == CPU_MASK_SIZE,
+            "unsupported native CPU mask size"
+        );
+
+        // SAFETY: CPU mask layout and size is ensured.
+        let mask: [u8; CPU_MASK_SIZE] = unsafe { core::mem::transmute(value) };
         Self { mask }
     }
 }
 
 #[cfg(target_os = "linux")]
-impl From<CpuSet> for crate::cpu_set_t {
+impl From<CpuSet> for cpu_set_t {
     fn from(value: CpuSet) -> Self {
+        assert!(
+            core::mem::size_of::<cpu_set_t>() == CPU_MASK_SIZE,
+            "unsupported native CPU mask size"
+        );
+
+        // SAFETY: CPU mask layout and size is ensured.
         unsafe { core::mem::transmute(value.mask) }
     }
 }
@@ -94,15 +119,18 @@ impl From<CpuSet> for crate::cpu_set_t {
 /// - allocate mask fields dynamically
 ///
 /// Current approach avoids dynamic alloc and aligns the behavior with Linux.
+///
+/// Refer to QNX docs for more information:
+/// https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.lib_ref/topic/t/threadctl.html
 #[cfg(target_os = "nto")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct NtoCpuSet {
     // Expected to always be set to `32` - see comment above.
-    pub size: i32,
-    pub run_mask: [u32; 32],
+    size: i32,
+    run_mask: [u32; 32],
     // Expected to always be zeroed - left unaltered.
-    pub inherit_mask: [u32; 32],
+    inherit_mask: [u32; 32],
 }
 
 #[cfg(target_os = "nto")]
@@ -119,6 +147,7 @@ impl NtoCpuSet {
 #[cfg(target_os = "nto")]
 impl From<NtoCpuSet> for CpuSet {
     fn from(value: NtoCpuSet) -> Self {
+        // SAFETY: CPU mask layout and size is ensured.
         let mask = unsafe { core::mem::transmute(value.run_mask) };
         Self { mask }
     }
@@ -127,6 +156,7 @@ impl From<NtoCpuSet> for CpuSet {
 #[cfg(target_os = "nto")]
 impl From<CpuSet> for NtoCpuSet {
     fn from(value: CpuSet) -> Self {
+        // SAFETY: CPU mask layout and size is ensured.
         let run_mask = unsafe { core::mem::transmute(value.mask) };
         Self::new(run_mask)
     }
@@ -136,55 +166,74 @@ impl From<CpuSet> for NtoCpuSet {
 pub fn set_affinity(cpu_set: CpuSet) {
     #[cfg(target_os = "linux")]
     {
-        let native_cpu_set = crate::cpu_set_t::from(cpu_set);
-        let cpu_set_size = core::mem::size_of::<crate::cpu_set_t>();
-        let rc = unsafe { crate::sched_setaffinity(0, cpu_set_size, &native_cpu_set as *const _) };
+        let native_cpu_set = cpu_set_t::from(cpu_set);
+        let cpu_set_size = core::mem::size_of::<cpu_set_t>();
+        // SAFETY:
+        // Native CPU set is properly initialized.
+        // Pointer is ensured to be valid.
+        let rc = unsafe { sched_setaffinity(0, cpu_set_size, &native_cpu_set) };
         if rc != 0 {
-            panic!("sched_setaffinity failed, rc: {rc}");
+            let errno = errno();
+            panic!("sched_setaffinity failed, rc: {rc}, errno: {errno}");
         }
     }
 
     #[cfg(target_os = "nto")]
     {
         let mut native_cpu_set = NtoCpuSet::from(cpu_set);
+        // SAFETY:
+        // Native CPU set is properly initialized.
+        // `NtoCpuSet` layout must be as expected by `ThreadCtl`.
+        // Pointer is ensured to be valid.
         let rc = unsafe {
-            crate::ThreadCtl(
-                crate::_NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT as crate::c_int,
+            ThreadCtl(
+                _NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT as crate::c_int,
                 (&mut native_cpu_set as *mut NtoCpuSet).cast(),
             )
         };
         if rc != 0 {
-            panic!("ThreadCtl failed, rc: {rc}");
+            let errno = errno();
+            panic!("ThreadCtl failed, rc: {rc}, errno: {errno}");
         }
     }
 }
 
 /// Get affinity of a current thread.
-pub fn get_affinity() -> Vec<usize> {
+pub fn get_affinity() -> FixedCapacityVec<usize> {
     #[cfg(target_os = "linux")]
     {
-        let mut native_cpu_set = unsafe { core::mem::zeroed::<crate::cpu_set_t>() };
-        let cpu_set_size = core::mem::size_of::<crate::cpu_set_t>();
-        let rc = unsafe { crate::sched_getaffinity(0, cpu_set_size, &mut native_cpu_set as *mut _) };
+        let mut native_cpu_set = core::mem::MaybeUninit::zeroed();
+        let cpu_set_size = core::mem::size_of::<cpu_set_t>();
+        // SAFETY:
+        // Provided native CPU set is zeroed, then initialized by a `sched_getaffinity` call.
+        // Pointer is ensured to be valid.
+        let rc = unsafe { sched_getaffinity(0, cpu_set_size, native_cpu_set.as_mut_ptr()) };
         if rc != 0 {
-            panic!("sched_getaffinity failed, rc: {rc}");
+            let errno = errno();
+            panic!("sched_getaffinity failed, rc: {rc}, errno: {errno}");
         }
 
-        let cpu_set = CpuSet::from(native_cpu_set);
+        // SAFETY: refer to a comment above.
+        let cpu_set = CpuSet::from(unsafe { native_cpu_set.assume_init() });
         cpu_set.get()
     }
 
     #[cfg(target_os = "nto")]
     {
         let mut native_cpu_set = NtoCpuSet::new([0; _]);
+        // SAFETY:
+        // Native CPU set is properly initialized.
+        // `NtoCpuSet` layout must be as expected by `ThreadCtl`.
+        // Pointer is ensured to be valid.
         let rc = unsafe {
-            crate::ThreadCtl(
-                crate::_NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT as crate::c_int,
+            ThreadCtl(
+                _NTO_TCTL_RUNMASK_GET_AND_SET_INHERIT as crate::c_int,
                 (&mut native_cpu_set as *mut NtoCpuSet).cast(),
             )
         };
         if rc != 0 {
-            panic!("ThreadCtl failed, rc: {rc}");
+            let errno = errno();
+            panic!("ThreadCtl failed, rc: {rc}, errno: {errno}");
         }
 
         let cpu_set = CpuSet::from(native_cpu_set);
@@ -194,7 +243,8 @@ pub fn get_affinity() -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use crate::affinity::CpuSet;
+    use crate::affinity::{get_affinity, set_affinity, CpuSet, MAX_CPU_NUM};
+    use std::sync::mpsc::channel;
 
     #[test]
     fn cpu_set_new_empty_succeeds() {
@@ -215,7 +265,7 @@ mod tests {
 
     #[test]
     fn cpu_set_new_full_succeeds() {
-        let all_ids: Vec<_> = (0..1024).collect();
+        let all_ids: Vec<_> = (0..MAX_CPU_NUM).collect();
         let cpu_set = CpuSet::new(&all_ids);
         assert!(cpu_set.mask.iter().all(|x| *x == 0xFF));
     }
@@ -250,6 +300,31 @@ mod tests {
         let exp = vec![0, 123, 1023];
         let cpu_set = CpuSet::new(&exp);
         let got = cpu_set.get();
-        assert_eq!(exp, got);
+        assert_eq!(exp, got.iter().copied().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn set_affinity_succeeds() {
+        let exp_affinity = vec![0];
+        let cpu_set = CpuSet::new(&exp_affinity);
+        let (tx, rx) = channel();
+        let join_handle = std::thread::spawn(move || {
+            set_affinity(cpu_set);
+            tx.send(get_affinity()).unwrap();
+        });
+        join_handle.join().unwrap();
+
+        assert_eq!(rx.recv().unwrap().iter().copied().collect::<Vec<_>>(), exp_affinity);
+    }
+
+    #[test]
+    fn set_affinity_out_of_range() {
+        // Assuming test is not running on a 1000-core machine, still within valid CPU mask.
+        let cpu_set = CpuSet::new(&[1000]);
+        let join_handle = std::thread::spawn(move || {
+            set_affinity(cpu_set);
+        });
+        let result = join_handle.join();
+        assert!(result.is_err());
     }
 }

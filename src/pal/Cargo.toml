@@ -14,13 +14,15 @@
 [package]
 name = "pal"
 description = "Minimal POSIX adaptation layer."
-version = "0.1.0"
-authors = ["Contributors to the Eclipse Foundation"]
-edition = "2021"
-license-file = "../../LICENSE.md"
+version.workspace = true
+authors.workspace = true
+readme.workspace = true
+edition.workspace = true
 
 [lib]
 path = "lib.rs"
 
 [dependencies]
 libc.workspace = true
+containers.workspace = true
+score_log.workspace = true

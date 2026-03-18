@@ -33,9 +33,11 @@ dependencies = [
 
 [[package]]
 name = "pal"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
+ "containers",
  "libc",
+ "score_log",
 ]
 
 [[package]]
@@ -115,9 +117,10 @@ dependencies = [
 
 [[package]]
 name = "thread"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "pal",
+ "score_log",
 ]
 
 [[package]]

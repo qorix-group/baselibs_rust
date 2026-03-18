@@ -11,10 +11,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-//! `pthread`-based parametrizable threading module.
+//! Unified `errno` access.
 
-mod parameters;
-mod thread;
+#[cfg(target_os = "linux")]
+use libc::__errno_location as errno_ptr;
 
-pub use parameters::{SchedulerParameters, SchedulerPolicy, ThreadParameters};
-pub use thread::{spawn, JoinHandle, Result};
+#[cfg(target_os = "nto")]
+use libc::__get_errno_ptr as errno_ptr;
+
+/// Current errno value.
+pub fn errno() -> crate::c_int {
+    // SAFETY: `errno_ptr` returns a pointer to a thread-local variable.
+    unsafe { *errno_ptr() }
+}

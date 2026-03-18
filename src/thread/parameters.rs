@@ -11,9 +11,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+use pal::CpuSet;
+use score_log::ScoreDebug;
+
 /// Scheduler policy.
 #[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, ScoreDebug, PartialEq, Eq)]
 pub enum SchedulerPolicy {
     Other = pal::SCHED_OTHER,
     Fifo = pal::SCHED_FIFO,
@@ -24,29 +27,55 @@ impl SchedulerPolicy {
     /// Get min thread priority for this policy.
     pub fn priority_min(&self) -> i32 {
         let policy_native = *self as i32;
+        // SAFETY:
+        // Native policy value is ensured.
+        // Operation is non-fallible.
         unsafe { pal::sched_get_priority_min(policy_native) }
     }
 
     /// Get max thread priority for this policy.
     pub fn priority_max(&self) -> i32 {
         let policy_native = *self as i32;
+        // SAFETY:
+        // Native policy value is ensured.
+        // Operation is non-fallible.
         unsafe { pal::sched_get_priority_max(policy_native) }
     }
 }
 
-impl From<i32> for SchedulerPolicy {
-    fn from(value: i32) -> Self {
+/// Indicates that provided scheduler policy is unknown or unsupported.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct UnknownSchedulerPolicy;
+
+impl core::fmt::Display for UnknownSchedulerPolicy {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "unknown or unsupported scheduler policy")
+    }
+}
+
+impl score_log::fmt::ScoreDebug for UnknownSchedulerPolicy {
+    fn fmt(&self, f: score_log::fmt::Writer, _spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::score_write!(f, "unknown or unsupported scheduler policy")
+    }
+}
+
+impl core::error::Error for UnknownSchedulerPolicy {}
+
+impl TryFrom<i32> for SchedulerPolicy {
+    type Error = UnknownSchedulerPolicy;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
-            pal::SCHED_OTHER => SchedulerPolicy::Other,
-            pal::SCHED_FIFO => SchedulerPolicy::Fifo,
-            pal::SCHED_RR => SchedulerPolicy::RoundRobin,
-            _ => panic!("unknown or unsupported scheduler policy"),
+            pal::SCHED_OTHER => Ok(SchedulerPolicy::Other),
+            pal::SCHED_FIFO => Ok(SchedulerPolicy::Fifo),
+            pal::SCHED_RR => Ok(SchedulerPolicy::RoundRobin),
+            _ => Err(UnknownSchedulerPolicy),
         }
     }
 }
 
 /// Scheduler parameters.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, ScoreDebug, PartialEq, Eq)]
 pub struct SchedulerParameters {
     policy: SchedulerPolicy,
     priority: i32,
@@ -79,10 +108,10 @@ impl SchedulerParameters {
 }
 
 /// Thread parameters.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, ScoreDebug, PartialEq, Eq)]
 pub struct ThreadParameters {
     pub(crate) scheduler_parameters: Option<SchedulerParameters>,
-    pub(crate) affinity: Option<Box<[usize]>>,
+    pub(crate) affinity: Option<CpuSet>,
     pub(crate) stack_size: Option<usize>,
 }
 
@@ -100,7 +129,7 @@ impl ThreadParameters {
 
     /// Set thread affinity - array of CPU core IDs that the thread can run on.
     pub fn affinity(mut self, affinity: &[usize]) -> Self {
-        self.affinity = Some(Box::from(affinity));
+        self.affinity = Some(CpuSet::new(affinity));
         self
     }
 
@@ -111,12 +140,11 @@ impl ThreadParameters {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
-    use crate::{
-        parameters::{SchedulerParameters, SchedulerPolicy},
-        ThreadParameters,
-    };
+    use crate::parameters::{SchedulerParameters, SchedulerPolicy};
+    use crate::ThreadParameters;
+    use pal::CpuSet;
 
     #[test]
     fn scheduler_policy_min_max_priority() {
@@ -127,14 +155,15 @@ mod tests {
 
     #[test]
     fn scheduler_policy_from_i32_succeeds() {
-        let policy = SchedulerPolicy::from(0);
-        assert_eq!(policy, SchedulerPolicy::Other);
+        let policy_as_int = SchedulerPolicy::Other as i32;
+        let policy = SchedulerPolicy::try_from(policy_as_int);
+        assert!(policy.is_ok_and(|p| p == SchedulerPolicy::Other));
     }
 
     #[test]
-    #[should_panic(expected = "unknown or unsupported scheduler policy")]
     fn scheduler_policy_from_i32_unknown() {
-        let _ = SchedulerPolicy::from(123);
+        let result = SchedulerPolicy::try_from(123);
+        assert!(result.is_err())
     }
 
     #[test]
@@ -176,7 +205,7 @@ mod tests {
             .stack_size(exp_stack_size);
 
         assert_eq!(thread_parameters.scheduler_parameters, Some(exp_scheduler_parameters));
-        assert_eq!(thread_parameters.affinity, Some(Box::from(exp_affinity)));
+        assert_eq!(thread_parameters.affinity, Some(CpuSet::new(&exp_affinity)));
         assert_eq!(thread_parameters.stack_size, Some(exp_stack_size));
     }
 }
