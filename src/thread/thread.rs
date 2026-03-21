@@ -12,7 +12,7 @@
 // *******************************************************************************
 
 use crate::parameters::{SchedulerPolicy, ThreadParameters};
-use core::cell::UnsafeCell;
+use core::cell::OnceCell;
 use core::mem::MaybeUninit;
 use core::ptr::null_mut;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -41,7 +41,7 @@ impl Attributes {
         // SAFETY:
         // Handle is initialized during object construction.
         // Pointer is ensured to be valid.
-        &mut self.attr_handle as *mut _
+        &mut self.attr_handle
     }
 
     /// Set inherit scheduling attributes.
@@ -103,7 +103,7 @@ impl Drop for Attributes {
     fn drop(&mut self) {
         // SAFETY: after drop handle is no longer needed and can be destructed.
         let rc = unsafe { pal::pthread_attr_destroy(self.ptr()) };
-        assert!(rc == 0, "pthread_attr_destroy failed, rc: {rc}");
+        debug_assert!(rc == 0, "pthread_attr_destroy failed, rc: {rc}");
     }
 }
 
@@ -169,18 +169,19 @@ pub type Result = core::result::Result<(), Box<dyn core::any::Any + Send + 'stat
 
 /// Packet containing thread result.
 ///
-/// No need for a mutex because synchronization happens with [`JoinHandle::join`].
-/// The caller will never read this packet until the thread has exited.
-struct Packet(UnsafeCell<Option<Result>>);
+/// No need for a mutex because:
+/// - state is set during thread.
+/// - the caller will never read this packet until the thread has exited.
+struct Packet(OnceCell<Result>);
 
 impl Packet {
     fn new() -> Self {
-        Self(UnsafeCell::new(None))
+        Self(OnceCell::new())
     }
 }
 
 // SAFETY:
-// Due to the usage of `UnsafeCell` manual implementation of `Sync` is required.
+// Due to the usage of `OnceCell` manual implementation of `Sync` is required.
 // The caller will never read this packet until the thread has exited.
 // This is based on `std::thread` implementation.
 unsafe impl Sync for Packet {}
@@ -188,7 +189,7 @@ unsafe impl Sync for Packet {}
 impl Drop for Packet {
     fn drop(&mut self) {
         // Make sure that panic was handled.
-        if let Some(result) = self.0.get_mut() {
+        if let Some(result) = self.0.get() {
             if result.is_err() {
                 panic!("unhandled panic occurred in a thread")
             }
@@ -211,8 +212,13 @@ impl JoinInner {
     ///
     /// This function will return immediately if the associated thread has already finished.
     pub fn join(mut self) -> Result {
+        // Perform native join.
         self.join_internal();
-        Arc::get_mut(&mut self.packet).unwrap().0.get_mut().take().unwrap()
+
+        // Obtain `packet` from `Arc`.
+        // This can only be done once thread finished.
+        let packet = Arc::get_mut(&mut self.packet).expect("thread not yet finished");
+        packet.0.take().expect("thread result uninitialized")
     }
 
     fn join_internal(&self) {
@@ -279,10 +285,9 @@ where
             // Execute function.
             f()
         }));
-        // SAFETY: this is the only mutation of `UnsafeCell` until `Packet::drop`.
-        unsafe {
-            *packet_clone.0.get() = Some(result);
-        }
+
+        // Set thread result.
+        packet_clone.0.set(result).expect("thread result is already set");
     };
 
     // Create a `Thread` and place it in a `JoinHandle`.
