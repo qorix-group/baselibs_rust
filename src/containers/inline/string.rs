@@ -45,12 +45,13 @@ impl<const CAPACITY: usize> InlineString<CAPACITY> {
     const CHECK_CAPACITY: () = assert!(0 < CAPACITY && CAPACITY <= u32::MAX as usize);
 
     /// Creates an empty string.
+    #[must_use]
     pub fn new() -> Self {
         let () = Self::CHECK_CAPACITY;
 
-        Self {
-            inner: GenericString::new(CAPACITY as u32),
-        }
+        let storage = Inline::<_, CAPACITY>::new();
+        let inner = GenericString::new(storage);
+        Self { inner }
     }
 }
 

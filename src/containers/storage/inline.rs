@@ -28,38 +28,24 @@ impl<T, const CAPACITY: usize> Inline<T, CAPACITY> {
     // Compile-time check. This condition _must_ be referenced in every function that depends on it,
     // otherwise it will be removed during monomorphization.
     const CHECK_CAPACITY: () = assert!(0 < CAPACITY && CAPACITY <= (u32::MAX as usize));
-}
 
-impl<T, const CAPACITY: usize> Storage<T> for Inline<T, CAPACITY> {
     /// Creates a new instance.
-    ///
-    /// # Panics
-    ///
-    /// Panics if and only if `capacity != CAPACITY`.
-    fn new(capacity: u32) -> Self {
+    pub fn new() -> Self {
         let () = Self::CHECK_CAPACITY;
 
-        assert_eq!(capacity as usize, CAPACITY);
         Self {
             elements: [const { MaybeUninit::uninit() }; CAPACITY],
         }
     }
+}
 
-    /// Tries to create a new instance.
-    ///
-    /// Returns `None` if and only if `capacity != CAPACITY`.
-    fn try_new(capacity: u32) -> Option<Self> {
-        let () = Self::CHECK_CAPACITY;
-
-        if capacity as usize == CAPACITY {
-            Some(Self {
-                elements: [const { MaybeUninit::uninit() }; CAPACITY],
-            })
-        } else {
-            None
-        }
+impl<T, const CAPACITY: usize> Default for Inline<T, CAPACITY> {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
+impl<T, const CAPACITY: usize> Storage<T> for Inline<T, CAPACITY> {
     fn capacity(&self) -> u32 {
         let () = Self::CHECK_CAPACITY;
 
@@ -119,7 +105,7 @@ mod tests {
 
         fn run_test<const N: usize>() {
             let capacity = N as u32;
-            let instance = Inline::<T, N>::new(capacity);
+            let instance = Inline::<T, N>::new();
 
             let empty_slice = unsafe { instance.subslice(0, 0) };
             assert_eq!(empty_slice.len(), 0);
@@ -159,7 +145,7 @@ mod tests {
 
         fn run_test<const N: usize>() {
             let capacity = N as u32;
-            let mut instance = Inline::<T, N>::new(capacity);
+            let mut instance = Inline::<T, N>::new();
 
             let empty_slice = unsafe { instance.subslice_mut(0, 0) };
             assert_eq!(empty_slice.len(), 0);
@@ -199,7 +185,7 @@ mod tests {
 
         fn run_test<const N: usize>() {
             let capacity = N as u32;
-            let instance = Inline::<T, N>::new(capacity);
+            let instance = Inline::<T, N>::new();
 
             if capacity >= 1 {
                 let first_element = unsafe { instance.element(0) };
@@ -240,7 +226,7 @@ mod tests {
 
         fn run_test<const N: usize>() {
             let capacity = N as u32;
-            let mut instance = Inline::<T, N>::new(capacity);
+            let mut instance = Inline::<T, N>::new();
 
             if capacity >= 1 {
                 let first_element = unsafe { instance.element_mut(0) };

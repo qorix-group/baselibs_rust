@@ -12,18 +12,22 @@
 // *******************************************************************************
 
 extern crate alloc;
-use alloc::alloc::alloc;
-use alloc::alloc::dealloc;
 
+use alloc::alloc::{alloc, dealloc};
+use core::alloc::Layout;
 use core::ptr::NonNull;
 
 use crate::allocator_traits::{AllocationError, BasicAllocator};
 
-#[derive(Debug, Clone, Copy)]
-pub struct GlobalAllocator;
+/// Global allocator.
+pub static GLOBAL_ALLOCATOR: HeapAllocator = HeapAllocator;
 
-impl BasicAllocator for GlobalAllocator {
-    fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, AllocationError> {
+/// Proxy to global heap allocation in Rust.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct HeapAllocator;
+
+impl BasicAllocator for HeapAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, AllocationError> {
         if layout.size() == 0 {
             return Err(AllocationError::ZeroSizeAllocation);
         }
@@ -33,20 +37,13 @@ impl BasicAllocator for GlobalAllocator {
             if ptr.is_null() {
                 return Err(AllocationError::OutOfMemory);
             }
-            Ok(NonNull::slice_from_raw_parts(
-                NonNull::new_unchecked(ptr),
-                layout.size(),
-            ))
+
+            // SAFETY: already checked for null.
+            Ok(NonNull::new_unchecked(ptr))
         }
     }
 
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: core::alloc::Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         dealloc(ptr.as_ptr(), layout);
-    }
-}
-
-impl Default for GlobalAllocator {
-    fn default() -> Self {
-        GlobalAllocator
     }
 }

@@ -23,23 +23,9 @@ use core::mem::MaybeUninit;
 ///
 /// # Panics
 ///
-/// With the exception of [`new`](Storage::new), the methods in this trait are *not* allowed to panic when `cfg(debug_assertions)` is not enabled.
+/// The methods in this trait are *not* allowed to panic when `cfg(debug_assertions)` is not enabled.
 /// Implementors should use `debug_assert!` to check that preconditions are fulfilled.
 pub trait Storage<T> {
-    /// Creates a new instance with enough capacity for the given number of elements.
-    ///
-    /// # Panics
-    ///
-    /// This method is allowed to panic when `capacity` is invalid, or when not enough memory could be allocated.
-    fn new(capacity: u32) -> Self;
-
-    /// Tries to create a new instance with enough capacity for the given number of elements.
-    ///
-    /// Returns `None` if the allocation failed for any reason.
-    fn try_new(capacity: u32) -> Option<Self>
-    where
-        Self: Sized;
-
     /// Returns the allocated capacity.
     fn capacity(&self) -> u32;
 
@@ -73,44 +59,48 @@ pub trait Storage<T> {
 }
 
 #[cfg(test)]
-mod test_utils {
+pub(crate) mod test_utils {
     //! A simple impl of [`Storage`] for [`Vec`], to be used for tests of generic containers.
 
     use super::*;
     use core::ptr;
 
-    impl<T> Storage<T> for Vec<MaybeUninit<T>> {
-        fn new(capacity: u32) -> Self {
+    pub struct TestVec<T>(Vec<MaybeUninit<T>>);
+
+    impl<T> TestVec<T> {
+        pub fn new(capacity: usize) -> Self {
             Self::try_new(capacity).unwrap_or_else(|| panic!("failed to allocate for {capacity} elements"))
         }
 
-        fn try_new(capacity: u32) -> Option<Self>
+        pub fn try_new(capacity: usize) -> Option<Self>
         where
             Self: Sized,
         {
             let mut instance = vec![];
-            instance.try_reserve_exact(capacity as usize).ok()?;
+            instance.try_reserve_exact(capacity).ok()?;
             instance.extend((0..capacity).map(|_| MaybeUninit::zeroed()));
-            Some(instance)
+            Some(Self(instance))
         }
+    }
 
+    impl<T> Storage<T> for TestVec<T> {
         fn capacity(&self) -> u32 {
-            self.capacity() as u32
+            self.0.capacity() as u32
         }
 
         unsafe fn element(&self, index: u32) -> &MaybeUninit<T> {
-            &self[index as usize]
+            &self.0[index as usize]
         }
 
         unsafe fn element_mut(&mut self, index: u32) -> &mut MaybeUninit<T> {
-            &mut self[index as usize]
+            &mut self.0[index as usize]
         }
 
         unsafe fn subslice(&self, start: u32, end: u32) -> *const [T] {
             debug_assert!(start <= end);
             debug_assert!(end <= Storage::capacity(self));
             // SAFETY: `start` is in-bounds of the array, as per the pre-condition on the trait method.
-            let ptr = unsafe { self.as_ptr().add(start as usize).cast() };
+            let ptr = unsafe { self.0.as_ptr().add(start as usize).cast() };
             let len = end - start;
             ptr::slice_from_raw_parts(ptr, len as usize)
         }
@@ -119,7 +109,7 @@ mod test_utils {
             debug_assert!(start <= end);
             debug_assert!(end <= Storage::capacity(self));
             // SAFETY: `start` is in-bounds of the array, as per the pre-condition on the trait method.
-            let ptr = unsafe { self.as_mut_ptr().add(start as usize).cast() };
+            let ptr = unsafe { self.0.as_mut_ptr().add(start as usize).cast() };
             let len = end - start;
             ptr::slice_from_raw_parts_mut(ptr, len as usize)
         }

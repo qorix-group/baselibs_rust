@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+use core::alloc::Layout;
 use core::ptr::NonNull;
 
 #[derive(Debug, Clone, Copy)]
@@ -27,7 +28,7 @@ pub enum AllocationError {
 
 pub trait BasicAllocator {
     /// Allocates a block of memory as described by `layout`.
-    fn allocate(&self, layout: core::alloc::Layout) -> Result<NonNull<[u8]>, AllocationError>;
+    fn allocate(&self, layout: Layout) -> Result<NonNull<u8>, AllocationError>;
 
     /// Deallocates the memory block pointed to by `ptr` with the given `layout`.
     ///
@@ -35,5 +36,5 @@ pub trait BasicAllocator {
     ///  - `ptr` must have been allocated by a previous call to `allocate` with the same `layout`.
     ///  - `layout` must match the layout used during allocation.
     ///
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: core::alloc::Layout);
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout);
 }

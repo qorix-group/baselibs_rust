@@ -43,12 +43,13 @@ impl<T: Copy, const CAPACITY: usize> InlineVec<T, CAPACITY> {
     const CHECK_CAPACITY: () = assert!(0 < CAPACITY && CAPACITY <= u32::MAX as usize);
 
     /// Creates an empty vector.
+    #[must_use]
     pub fn new() -> Self {
         let () = Self::CHECK_CAPACITY;
 
-        Self {
-            inner: GenericVec::new(CAPACITY as u32),
-        }
+        let storage = Inline::<T, CAPACITY>::new();
+        let inner = GenericVec::new(storage);
+        Self { inner }
     }
 }
 

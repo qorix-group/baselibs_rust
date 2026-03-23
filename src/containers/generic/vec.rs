@@ -28,28 +28,13 @@ pub struct GenericVec<T, S: Storage<T>> {
 }
 
 impl<T, S: Storage<T>> GenericVec<T, S> {
-    /// Creates an empty vector with the given capacity.
-    ///
-    /// # Panics
-    ///
-    /// Panics if not enough memory could be allocated.
-    pub fn new(capacity: u32) -> Self {
+    /// Creates an empty vector backed by the given storage.
+    pub fn new(storage: S) -> Self {
         Self {
             len: 0,
-            storage: S::new(capacity),
+            storage,
             _marker: PhantomData,
         }
-    }
-
-    /// Tries to create an empty vector with the given capacity.
-    ///
-    /// Returns `None` if not enough memory could be allocated.
-    pub fn try_new(capacity: u32) -> Option<Self> {
-        Some(Self {
-            len: 0,
-            storage: S::try_new(capacity)?,
-            _marker: PhantomData,
-        })
     }
 
     /// Extracts a slice containing the entire vector.
@@ -192,14 +177,14 @@ impl<T: fmt::Debug, S: Storage<T>> fmt::Debug for GenericVec<T, S> {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::MaybeUninit;
-
     use super::*;
+    use crate::storage::test_utils::TestVec;
 
     #[test]
     fn push_and_pop() {
         fn run_test(n: usize) {
-            let mut vector = GenericVec::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut vector = GenericVec::new(storage);
             let mut control = vec![];
 
             let result = vector.pop();
@@ -234,7 +219,8 @@ mod tests {
     #[test]
     fn is_full_and_is_empty() {
         fn run_test(n: usize) {
-            let mut vector = GenericVec::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut vector = GenericVec::new(storage);
             assert!(vector.is_empty());
 
             for i in 0..n {

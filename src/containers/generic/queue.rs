@@ -33,12 +33,12 @@ pub struct GenericQueue<T, S: Storage<T>> {
 }
 
 impl<T, S: Storage<T>> GenericQueue<T, S> {
-    /// Creates an empty queue.
-    pub fn new(capacity: u32) -> Self {
+    /// Creates an empty queue backed by the given storage.
+    pub fn new(storage: S) -> Self {
         Self {
             len: 0,
             front_index: 0,
-            storage: S::new(capacity),
+            storage,
             _marker: PhantomData,
         }
     }
@@ -382,9 +382,9 @@ impl<T> FusedIterator for IterMut<'_, T> {}
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::VecDeque, mem::MaybeUninit};
-
     use super::*;
+    use crate::storage::test_utils::TestVec;
+    use std::collections::VecDeque;
 
     fn to_vec<T: Copy>((first, second): (&[T], &[T])) -> Vec<T> {
         let mut elements = first.to_vec();
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn front_and_back() {
-        fn check_front_and_back(queue: &mut GenericQueue<i64, Vec<MaybeUninit<i64>>>, control: &mut VecDeque<i64>) {
+        fn check_front_and_back(queue: &mut GenericQueue<i64, TestVec<i64>>, control: &mut VecDeque<i64>) {
             assert_eq!(queue.front(), control.front());
             assert_eq!(queue.front_mut(), control.front_mut());
             assert_eq!(queue.back(), control.back());
@@ -402,7 +402,8 @@ mod tests {
         }
 
         fn run_test(n: usize) {
-            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut queue = GenericQueue::new(storage);
             let mut control = VecDeque::new();
 
             // Completely fill and empty the queue n times, but move the internal start point
@@ -437,7 +438,7 @@ mod tests {
 
     #[test]
     fn iter() {
-        fn check_iter(queue: &mut GenericQueue<i64, Vec<MaybeUninit<i64>>>, control: &mut VecDeque<i64>) {
+        fn check_iter(queue: &mut GenericQueue<i64, TestVec<i64>>, control: &mut VecDeque<i64>) {
             // Test the Iterator::next() implementation:
             assert_eq!(queue.iter().collect::<Vec<_>>(), control.iter().collect::<Vec<_>>());
             assert_eq!(
@@ -456,7 +457,8 @@ mod tests {
         }
 
         fn run_test(n: usize) {
-            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut queue = GenericQueue::new(storage);
             let mut control = VecDeque::new();
 
             // Completely fill and empty the queue n times, but move the internal start point
@@ -492,7 +494,8 @@ mod tests {
     #[test]
     fn push_back_and_pop_front() {
         fn run_test(n: usize) {
-            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut queue = GenericQueue::new(storage);
             let mut control = VecDeque::new();
 
             // Completely fill and empty the queue n times, but move the internal start point
@@ -535,7 +538,8 @@ mod tests {
     #[test]
     fn push_front_and_pop_back() {
         fn run_test(n: usize) {
-            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut queue = GenericQueue::new(storage);
             let mut control = VecDeque::new();
 
             // Completely fill and empty the queue n times, but move the internal start point
@@ -578,7 +582,8 @@ mod tests {
     #[test]
     fn is_empty_and_is_full() {
         fn run_test(n: usize) {
-            let mut queue = GenericQueue::<i64, Vec<MaybeUninit<i64>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut queue = GenericQueue::new(storage);
 
             // Completely fill and empty the queue n times, but move the internal start point
             // ahead by one each time

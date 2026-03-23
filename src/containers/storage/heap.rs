@@ -11,31 +11,31 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-use alloc::alloc::alloc;
-use alloc::alloc::dealloc;
+use crate::storage::Storage;
 use alloc::alloc::Layout;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::ptr;
 use core::ptr::NonNull;
-
-use super::Storage;
+use elementary::BasicAllocator;
 
 /// Fixed-capacity, heap-allocated storage.
-pub struct Heap<T> {
+pub struct Heap<'alloc, T, A: BasicAllocator> {
     /// Allocated capacity, in number of elements.
     capacity: u32,
     /// Pointer to the allocated memory.
     ///
     /// If `self.capacity > 0`, this points to an allocated memory area of size `self.capacity * size_of<T>` and alignment `align_of<T>`.
     elements: NonNull<T>,
+    /// Allocator used by the storage.
+    alloc: &'alloc A,
     _marker: PhantomData<T>,
 }
 
-// SAFETY: `Heap<T>` can be sent to another thread if `T` can be sent to another thread. It's because we use system allocation which is send-safe.
-unsafe impl<T: Send> Send for Heap<T> {}
+// SAFETY: `Heap<T>` can be sent to another thread if `T` can be sent to another thread and used allocator is send-safe.
+unsafe impl<T: Send, A: BasicAllocator + Send> Send for Heap<'_, T, A> {}
 
-impl<T> Heap<T> {
+impl<T, A: BasicAllocator> Heap<'_, T, A> {
     fn layout(capacity: u32) -> Option<Layout> {
         (capacity as usize)
             .checked_mul(size_of::<T>())
@@ -43,14 +43,14 @@ impl<T> Heap<T> {
     }
 }
 
-impl<T> Storage<T> for Heap<T> {
+impl<'alloc, T, A: BasicAllocator> Heap<'alloc, T, A> {
     /// Creates a new instance with capacity for exactly the given number of elements.
     ///
     /// # Panics
     ///
     /// Panics if the memory allocation failed.
-    fn new(capacity: u32) -> Self {
-        Self::try_new(capacity).unwrap_or_else(|| {
+    pub fn new(capacity: u32, alloc: &'alloc A) -> Self {
+        Self::try_new(capacity, alloc).unwrap_or_else(|| {
             panic!(
                 "failed to allocate {capacity} elements of {typ}",
                 typ = core::any::type_name::<T>()
@@ -61,21 +61,24 @@ impl<T> Storage<T> for Heap<T> {
     /// Tries to create a new instance with capacity for exactly the given number of elements.
     ///
     /// Returns `None` if the memory allocation failed.
-    fn try_new(capacity: u32) -> Option<Self> {
+    pub fn try_new(capacity: u32, alloc: &'alloc A) -> Option<Self> {
         let storage = if capacity > 0 {
             let layout = Self::layout(capacity)?;
             // SAFETY: `layout` has a non-zero size (because `capacity` is > 0)
-            NonNull::new(unsafe { alloc(layout) })?
+            NonNull::new(alloc.allocate(layout).ok()?.as_ptr())?
         } else {
             NonNull::dangling()
         };
         Some(Self {
             capacity,
             elements: storage.cast::<T>(),
+            alloc,
             _marker: PhantomData,
         })
     }
+}
 
+impl<T, A: BasicAllocator> Storage<T> for Heap<'_, T, A> {
     fn capacity(&self) -> u32 {
         self.capacity
     }
@@ -119,7 +122,7 @@ impl<T> Storage<T> for Heap<T> {
     }
 }
 
-impl<T> Drop for Heap<T> {
+impl<T, A: BasicAllocator> Drop for Heap<'_, T, A> {
     fn drop(&mut self) {
         if self.capacity > 0 {
             let layout = Self::layout(self.capacity).unwrap();
@@ -127,7 +130,8 @@ impl<T> Drop for Heap<T> {
             // - `self.elements` has previously been allocated with `alloc`
             // - `layout` is the same as the one used for the allocation
             unsafe {
-                dealloc(self.elements.as_ptr().cast::<u8>(), layout);
+                let ptr = self.elements.cast();
+                self.alloc.deallocate(ptr, layout);
             }
         }
     }
@@ -136,13 +140,14 @@ impl<T> Drop for Heap<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use elementary::{HeapAllocator, GLOBAL_ALLOCATOR};
 
     #[test]
     fn subslice() {
         type T = u64;
 
         fn run_test(capacity: u32) {
-            let instance = Heap::<T>::new(capacity);
+            let instance = Heap::<T, _>::new(capacity, &GLOBAL_ALLOCATOR);
 
             let empty_slice = unsafe { instance.subslice(0, 0) };
             assert_eq!(empty_slice.len(), 0);
@@ -176,7 +181,7 @@ mod tests {
         type T = u64;
 
         fn run_test(capacity: u32) {
-            let mut instance = Heap::<T>::new(capacity);
+            let mut instance = Heap::<T, HeapAllocator>::new(capacity, &GLOBAL_ALLOCATOR);
 
             let empty_slice = unsafe { instance.subslice_mut(0, 0) };
             assert_eq!(empty_slice.len(), 0);
@@ -210,7 +215,7 @@ mod tests {
         type T = u64;
 
         fn run_test(capacity: u32) {
-            let instance = Heap::<T>::new(capacity);
+            let instance = Heap::<T, HeapAllocator>::new(capacity, &GLOBAL_ALLOCATOR);
 
             if capacity >= 1 {
                 let first_element = unsafe { instance.element(0) };
@@ -245,7 +250,7 @@ mod tests {
         type T = u64;
 
         fn run_test(capacity: u32) {
-            let mut instance = Heap::<T>::new(capacity);
+            let mut instance = Heap::<T, HeapAllocator>::new(capacity, &GLOBAL_ALLOCATOR);
 
             if capacity >= 1 {
                 let first_element = unsafe { instance.element_mut(0) };

@@ -21,3 +21,6 @@ license-file = "../../LICENSE.md"
 
 [lib]
 path = "lib.rs"
+
+[dependencies]
+elementary.workspace = true

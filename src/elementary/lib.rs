@@ -11,5 +11,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
-pub mod allocator_traits;
-pub mod global_allocator;
+mod allocator_traits;
+mod heap_allocator;
+
+pub use allocator_traits::{AllocationError, BasicAllocator};
+pub use heap_allocator::{HeapAllocator, GLOBAL_ALLOCATOR};

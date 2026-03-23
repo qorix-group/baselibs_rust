@@ -47,9 +47,9 @@ impl<T: Copy, const CAPACITY: usize> InlineQueue<T, CAPACITY> {
     pub fn new() -> Self {
         let () = Self::CHECK_CAPACITY;
 
-        Self {
-            inner: GenericQueue::new(CAPACITY as u32),
-        }
+        let storage = Inline::<T, CAPACITY>::new();
+        let inner = GenericQueue::new(storage);
+        Self { inner }
     }
 }
 

@@ -27,28 +27,13 @@ pub struct GenericString<S: Storage<u8>> {
 }
 
 impl<S: Storage<u8>> GenericString<S> {
-    /// Creates an empty string with the given capacity in bytes.
+    /// Creates an empty string backed by the given storage.
     ///
     /// Note that the string is encoded as UTF-8, so each character (Unicode codepoint) requires between 1 and 4 bytes of storage.
-    ///
-    /// # Panics
-    ///
-    /// Panics if not enough memory could be allocated.
-    pub fn new(capacity: u32) -> Self {
+    pub fn new(storage: S) -> Self {
         Self {
-            vec: GenericVec::new(capacity),
+            vec: GenericVec::new(storage),
         }
-    }
-
-    /// Tries to create an empty string with the given capacity in bytes.
-    ///
-    /// Note that the string is encoded as UTF-8, so each character (Unicode codepoint) requires between 1 and 4 bytes of storage.
-    ///
-    /// Returns `None` if not enough memory could be allocated.
-    pub fn try_new(capacity: u32) -> Option<Self> {
-        Some(Self {
-            vec: GenericVec::try_new(capacity)?,
-        })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -154,14 +139,14 @@ impl<S: Storage<u8>> fmt::Debug for GenericString<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::MaybeUninit;
-
     use super::*;
+    use crate::storage::test_utils::TestVec;
 
     #[test]
     fn push_and_pop() {
         fn run_test(n: usize) {
-            let mut string = GenericString::<Vec<MaybeUninit<u8>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut string = GenericString::new(storage);
             let mut control = String::new();
 
             let result = string.pop();
@@ -196,7 +181,8 @@ mod tests {
     #[test]
     fn push_str() {
         fn run_test(n: usize) {
-            let mut string = GenericString::<Vec<MaybeUninit<u8>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut string = GenericString::new(storage);
             let mut control = String::new();
 
             let samples = ["abc", "\0", "😉", "👍🏼🚀", "αβγ"];
@@ -224,7 +210,8 @@ mod tests {
     #[test]
     fn is_full_and_is_empty() {
         fn run_test(n: usize) {
-            let mut string = GenericString::<Vec<MaybeUninit<u8>>>::new(n as u32);
+            let storage = TestVec::new(n);
+            let mut string = GenericString::new(storage);
             assert!(string.is_empty());
 
             let sample = "abcdefghi";

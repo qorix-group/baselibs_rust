@@ -18,6 +18,7 @@ rust_library(
     srcs = glob(["**/*.rs"]),
     edition = "2021",
     visibility = ["//visibility:public"],
+    deps = ["//src/elementary"],
 )
 
 rust_test(

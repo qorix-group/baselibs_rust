@@ -20,7 +20,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering as AtomicOrdering},
 };
 
-use elementary::allocator_traits::BasicAllocator;
+use elementary::BasicAllocator;
 
 /// A reference-counted smart pointer with custom allocator support like `std::sync::Arc`.
 /// The `ArcIn` type provides shared ownership of a value of type `T`, allocated using the specified allocator `A`.
@@ -155,13 +155,13 @@ impl<T, A: BasicAllocator> Drop for ArcIn<T, A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elementary::global_allocator::GlobalAllocator;
+    use elementary::HeapAllocator;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hash;
 
     #[test]
     fn new_and_deref() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc = ArcIn::new_in(42, alloc);
         assert_eq!(*arc, 42);
         assert_eq!(ArcIn::strong_count(&arc), 1);
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn clone_increases_count() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc1 = ArcIn::new_in(100, alloc);
         let arc2 = arc1.clone();
         assert_eq!(ArcIn::strong_count(&arc1), 2);
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn drop_decreases_count() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc1 = ArcIn::new_in(55, alloc);
         assert_eq!(ArcIn::strong_count(&arc1), 1);
         {
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn debug_trait() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc = ArcIn::new_in("hello", alloc);
         let s = format!("{:?}", arc);
         assert_eq!(s, "\"hello\"");
@@ -199,14 +199,14 @@ mod tests {
 
     #[test]
     fn default_trait() {
-        let arc: ArcIn<u32, GlobalAllocator> = ArcIn::default();
+        let arc: ArcIn<u32, HeapAllocator> = ArcIn::default();
         assert_eq!(*arc, 0);
         assert_eq!(ArcIn::strong_count(&arc), 1);
     }
 
     #[test]
     fn as_ref_trait() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc = ArcIn::new_in("world".to_string(), alloc);
         let s: &str = arc.as_ref();
         assert_eq!(s, "world");
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn eq_ord_hash() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc1 = ArcIn::new_in(5, alloc);
         let arc2 = ArcIn::new_in(5, alloc);
         let arc3 = ArcIn::new_in(10, alloc);
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn strong_count_multiple_clones() {
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let arc = ArcIn::new_in(123, alloc);
         let clones: Vec<_> = (0..5).map(|_| arc.clone()).collect();
         assert_eq!(ArcIn::strong_count(&arc), 6);
@@ -250,7 +250,7 @@ mod tests {
             }
         }
 
-        let alloc = GlobalAllocator;
+        let alloc = HeapAllocator;
         let mut dropped = false;
         {
             let arc = ArcIn::new_in(DropCounter(&mut dropped), alloc);
