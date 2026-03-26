@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+use core::fmt;
 use core::ops;
 
 use crate::generic::queue::GenericQueue;
@@ -70,6 +71,21 @@ impl<T: Copy, const CAPACITY: usize> ops::Deref for InlineQueue<T, CAPACITY> {
 impl<T: Copy, const CAPACITY: usize> ops::DerefMut for InlineQueue<T, CAPACITY> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
+    }
+}
+
+impl<T: Copy + fmt::Debug, const CAPACITY: usize> fmt::Debug for InlineQueue<T, CAPACITY> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, f)
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl<T: Copy + score_log::fmt::ScoreDebug, const CAPACITY: usize> score_log::fmt::ScoreDebug
+    for InlineQueue<T, CAPACITY>
+{
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.inner, f, spec)
     }
 }
 

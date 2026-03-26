@@ -175,6 +175,13 @@ impl<T: fmt::Debug, S: Storage<T>> fmt::Debug for GenericVec<T, S> {
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug, S: Storage<T>> score_log::fmt::ScoreDebug for GenericVec<T, S> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(self.as_slice(), f, spec)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -188,6 +188,16 @@ where
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<T: Copy, E: Copy> score_log::fmt::ScoreDebug for InlineResult<T, E>
+where
+    for<'a> Result<&'a T, &'a E>: score_log::fmt::ScoreDebug,
+{
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.as_ref(), f, spec)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

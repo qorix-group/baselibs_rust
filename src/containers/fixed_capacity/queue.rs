@@ -13,6 +13,7 @@
 
 use crate::generic::queue::GenericQueue;
 use crate::storage::Heap;
+use core::fmt;
 use core::ops;
 use elementary::{BasicAllocator, HeapAllocator, GLOBAL_ALLOCATOR};
 
@@ -64,6 +65,19 @@ impl<T, A: BasicAllocator> ops::DerefMut for FixedCapacityQueueIn<'_, T, A> {
     }
 }
 
+impl<T: fmt::Debug, A: BasicAllocator> fmt::Debug for FixedCapacityQueueIn<'_, T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, f)
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug, A: BasicAllocator> score_log::fmt::ScoreDebug for FixedCapacityQueueIn<'_, T, A> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.inner, f, spec)
+    }
+}
+
 /// A fixed-capacity queue, using global allocator.
 /// Refer to [`FixedCapacityQueueIn`] for more information.
 pub struct FixedCapacityQueue<T>(FixedCapacityQueueIn<'static, T, HeapAllocator>);
@@ -92,6 +106,19 @@ impl<T> ops::Deref for FixedCapacityQueue<T> {
 impl<T> ops::DerefMut for FixedCapacityQueue<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0.inner
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for FixedCapacityQueue<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug> score_log::fmt::ScoreDebug for FixedCapacityQueue<T> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.0, f, spec)
     }
 }
 

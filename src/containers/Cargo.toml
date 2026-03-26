@@ -24,3 +24,8 @@ path = "lib.rs"
 
 [dependencies]
 elementary.workspace = true
+# `score_log` introduces `std`.
+score_log = { workspace = true, optional = true }
+
+[features]
+default = ["score_log"]

@@ -85,6 +85,13 @@ impl<T: fmt::Debug, A: BasicAllocator> fmt::Debug for FixedCapacityVecIn<'_, T, 
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug, A: BasicAllocator> score_log::fmt::ScoreDebug for FixedCapacityVecIn<'_, T, A> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(self.as_slice(), f, spec)
+    }
+}
+
 /// A fixed-capacity vector, using global allocator.
 /// Refer to [`FixedCapacityVecIn`] for more information.
 pub struct FixedCapacityVec<T>(FixedCapacityVecIn<'static, T, HeapAllocator>);
@@ -128,6 +135,13 @@ impl<T> ops::DerefMut for FixedCapacityVec<T> {
 impl<T: fmt::Debug> fmt::Debug for FixedCapacityVec<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.0.as_slice(), f)
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug> score_log::fmt::ScoreDebug for FixedCapacityVec<T> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.0, f, spec)
     }
 }
 

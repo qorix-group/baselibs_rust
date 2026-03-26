@@ -98,6 +98,13 @@ impl<A: BasicAllocator> fmt::Debug for FixedCapacityStringIn<'_, A> {
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<A: BasicAllocator> score_log::fmt::ScoreDebug for FixedCapacityStringIn<'_, A> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(self.as_str(), f, spec)
+    }
+}
+
 /// A fixed-capacity Unicode string, using global allocator.
 /// Refer to [`FixedCapacityStringIn`] for more information.
 pub struct FixedCapacityString(FixedCapacityStringIn<'static, HeapAllocator>);
@@ -150,7 +157,14 @@ impl fmt::Display for FixedCapacityString {
 
 impl fmt::Debug for FixedCapacityString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(self.0.as_str(), f)
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl score_log::fmt::ScoreDebug for FixedCapacityString {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(&self.0, f, spec)
     }
 }
 

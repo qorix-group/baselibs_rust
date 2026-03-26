@@ -81,6 +81,13 @@ impl<const CAPACITY: usize> fmt::Debug for InlineString<CAPACITY> {
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<const CAPACITY: usize> score_log::fmt::ScoreDebug for InlineString<CAPACITY> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(self.as_str(), f, spec)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

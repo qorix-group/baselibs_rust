@@ -137,6 +137,13 @@ impl<S: Storage<u8>> fmt::Debug for GenericString<S> {
     }
 }
 
+#[cfg(feature = "score_log")]
+impl<S: Storage<u8>> score_log::fmt::ScoreDebug for GenericString<S> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::ScoreDebug::fmt(self.as_str(), f, spec)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

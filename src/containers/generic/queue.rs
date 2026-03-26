@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // *******************************************************************************
 
+use core::fmt;
 use core::iter::FusedIterator;
 use core::marker::PhantomData;
 use core::mem::needs_drop;
@@ -275,6 +276,19 @@ impl<T, S: Storage<T>> GenericQueue<T, S> {
         } else {
             None
         }
+    }
+}
+
+impl<T: fmt::Debug, S: Storage<T>> fmt::Debug for GenericQueue<T, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+#[cfg(feature = "score_log")]
+impl<T: score_log::fmt::ScoreDebug, S: Storage<T>> score_log::fmt::ScoreDebug for GenericQueue<T, S> {
+    fn fmt(&self, f: score_log::fmt::Writer, spec: &score_log::fmt::FormatSpec) -> score_log::fmt::Result {
+        score_log::fmt::DebugList::new(f, spec).entries(self.iter()).finish()
     }
 }
 

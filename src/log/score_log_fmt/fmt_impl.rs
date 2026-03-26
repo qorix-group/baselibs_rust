@@ -14,14 +14,14 @@
 //! `ScoreDebug` implementations for common types.
 
 use crate::builders::{DebugList, DebugStruct, DebugTuple};
-use crate::fmt::{Error, Result, ScoreDebug, Writer};
+use crate::fmt::{Error, Result as FmtResult, ScoreDebug, Writer};
 use crate::fmt_spec::{DisplayHint, FormatSpec};
 use crate::DebugMap;
 
 macro_rules! impl_debug_for_t {
     ($t:ty, $fn:ident) => {
         impl ScoreDebug for $t {
-            fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+            fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
                 f.$fn(self, spec)
             }
         }
@@ -41,13 +41,13 @@ impl_debug_for_t!(u32, write_u32);
 impl_debug_for_t!(u64, write_u64);
 
 impl ScoreDebug for () {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         f.write_str("()", spec)
     }
 }
 
 impl ScoreDebug for str {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         match spec.get_display_hint() {
             DisplayHint::Debug => {
                 let queue_spec = FormatSpec::new();
@@ -61,13 +61,13 @@ impl ScoreDebug for str {
 }
 
 impl ScoreDebug for String {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&self.as_str(), f, spec)
     }
 }
 
 impl ScoreDebug for core::str::Utf8Error {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_struct = DebugStruct::new(f, spec, "Utf8Error");
         debug_struct
             .field("valid_up_to", &self.valid_up_to())
@@ -77,7 +77,7 @@ impl ScoreDebug for core::str::Utf8Error {
 }
 
 impl ScoreDebug for std::string::FromUtf8Error {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_struct = DebugStruct::new(f, spec, "FromUtf8Error");
         debug_struct
             .field("bytes", &self.as_bytes())
@@ -87,7 +87,7 @@ impl ScoreDebug for std::string::FromUtf8Error {
 }
 
 impl ScoreDebug for core::time::Duration {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         f.write_f64(&self.as_secs_f64(), spec)?;
         f.write_str("s", spec)
     }
@@ -96,7 +96,7 @@ impl ScoreDebug for core::time::Duration {
 macro_rules! impl_debug_for_t_casted {
     ($ti:ty, $to:ty, $fn:ident) => {
         impl ScoreDebug for $ti {
-            fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+            fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
                 let casted = <$to>::try_from(*self).map_err(|_| Error)?;
                 f.$fn(&casted, spec)
             }
@@ -114,57 +114,57 @@ impl_debug_for_t_casted!(usize, u32, write_u32);
 impl_debug_for_t_casted!(usize, u64, write_u64);
 
 impl<T: ScoreDebug + ?Sized> ScoreDebug for &T {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
 
 impl<T: ScoreDebug + ?Sized> ScoreDebug for &mut T {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
 
 impl<T: ScoreDebug> ScoreDebug for [T] {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_list = DebugList::new(f, spec);
         debug_list.entries(self.iter()).finish()
     }
 }
 
 impl<T: ScoreDebug, const N: usize> ScoreDebug for [T; N] {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&&self[..], f, spec)
     }
 }
 
 impl ScoreDebug for core::array::TryFromSliceError {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_tuple = DebugTuple::new(f, spec, "TryFromSliceError");
         debug_tuple.field(&()).finish()
     }
 }
 
 impl<T: ScoreDebug> ScoreDebug for Vec<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
 
 impl<T: ScoreDebug> ScoreDebug for std::rc::Rc<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
 
 impl<T: ScoreDebug> ScoreDebug for std::sync::Arc<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
 
 impl<T: ScoreDebug> ScoreDebug for Option<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         match self {
             Some(v) => {
                 let outer_spec = FormatSpec::new();
@@ -177,8 +177,27 @@ impl<T: ScoreDebug> ScoreDebug for Option<T> {
     }
 }
 
+impl<T: ScoreDebug, E: ScoreDebug> ScoreDebug for Result<T, E> {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
+        match self {
+            Ok(v) => {
+                let outer_spec = FormatSpec::new();
+                f.write_str("Ok(", &outer_spec)?;
+                ScoreDebug::fmt(v, f, spec)?;
+                f.write_str(")", &outer_spec)
+            },
+            Err(e) => {
+                let outer_spec = FormatSpec::new();
+                f.write_str("Err(", &outer_spec)?;
+                ScoreDebug::fmt(e, f, spec)?;
+                f.write_str(")", &outer_spec)
+            },
+        }
+    }
+}
+
 impl<T: ScoreDebug + ?Sized> ScoreDebug for Box<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         ScoreDebug::fmt(&**self, f, spec)
     }
 }
@@ -188,27 +207,27 @@ where
     K: ScoreDebug,
     V: ScoreDebug,
 {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_map = DebugMap::new(f, spec);
         debug_map.entries(self.iter()).finish()
     }
 }
 
 impl<T> ScoreDebug for std::sync::PoisonError<T> {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         let mut debug_struct = DebugStruct::new(f, spec, "PoisonError");
         debug_struct.finish_non_exhaustive()
     }
 }
 
 impl<A: ScoreDebug, B: ScoreDebug> ScoreDebug for (A, B) {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         DebugTuple::new(f, spec, "").field(&self.0).field(&self.1).finish()
     }
 }
 
 impl<A: ScoreDebug, B: ScoreDebug, C: ScoreDebug> ScoreDebug for (A, B, C) {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         DebugTuple::new(f, spec, "")
             .field(&self.0)
             .field(&self.1)
@@ -218,7 +237,7 @@ impl<A: ScoreDebug, B: ScoreDebug, C: ScoreDebug> ScoreDebug for (A, B, C) {
 }
 
 impl<A: ScoreDebug, B: ScoreDebug, C: ScoreDebug, D: ScoreDebug> ScoreDebug for (A, B, C, D) {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         DebugTuple::new(f, spec, "")
             .field(&self.0)
             .field(&self.1)
@@ -229,7 +248,7 @@ impl<A: ScoreDebug, B: ScoreDebug, C: ScoreDebug, D: ScoreDebug> ScoreDebug for 
 }
 
 impl<A: ScoreDebug, B: ScoreDebug, C: ScoreDebug, D: ScoreDebug, E: ScoreDebug> ScoreDebug for (A, B, C, D, E) {
-    fn fmt(&self, f: Writer, spec: &FormatSpec) -> Result {
+    fn fmt(&self, f: Writer, spec: &FormatSpec) -> FmtResult {
         DebugTuple::new(f, spec, "")
             .field(&self.0)
             .field(&self.1)
@@ -376,6 +395,14 @@ mod tests {
     fn test_option_debug() {
         common_test_debug(Some(123));
         common_test_debug(Option::<i32>::None);
+    }
+
+    #[test]
+    fn test_result_debug() {
+        let r1: Result<i32, &'static str> = Ok(123);
+        common_test_debug(r1);
+        let r2: Result<i32, &'static str> = Err("fail");
+        common_test_debug(r2);
     }
 
     #[test]
