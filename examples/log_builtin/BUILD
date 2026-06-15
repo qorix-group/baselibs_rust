@@ -16,6 +16,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 rust_binary(
     name = "log_builtin",
     srcs = glob(["src/**/*.rs"]),
+    visibility = ["//visibility:public"],
     deps = [
         "//src/log/score_log",
         "//src/log/stdout_logger",
